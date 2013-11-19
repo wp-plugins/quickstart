@@ -36,17 +36,17 @@ class Setup extends \SmartPlugin {
 	 * @var array
 	 */
 	protected $method_hooks = array(
-		'run_theme_setups'           => array( 'after_theme_setup', 10, 0 ),
-		'save_meta_box'              => array( 'save_post', 10, 1 ),
-		'add_meta_box'               => array( 'add_meta_boxes', 10, 0 ),
-		'add_mce_buttons'            => array( 'mce_buttons', 10, 1 ),
-		'add_mce_buttons_2'          => array( 'mce_buttons_2', 10, 1 ),
-		'add_mce_buttons_3'          => array( 'mce_buttons_3', 10, 1 ),
-		'add_mce_plugin'             => array( 'mce_external_plugins', 10, 1),
-		'register_mce_style_formats' => array( 'tiny_mce_before_init', 10, 1 ),
-		'register_setting'           => array( 'admin_init', 10, 0 ),
-		'register_settings'          => array( 'admin_init', 10, 0 ),
-		'add_page_to_menu'           => array('admin_menu', 0),
+		'run_theme_setups'      => array( 'after_theme_setup', 10, 0 ),
+		'save_meta_box'         => array( 'save_post', 10, 1 ),
+		'add_meta_box'          => array( 'add_meta_boxes', 10, 0 ),
+		'add_mce_buttons'       => array( 'mce_buttons', 10, 1 ),
+		'add_mce_buttons_2'     => array( 'mce_buttons_2', 10, 1 ),
+		'add_mce_buttons_3'     => array( 'mce_buttons_3', 10, 1 ),
+		'add_mce_plugin'        => array( 'mce_external_plugins', 10, 1),
+		'add_mce_style_formats' => array( 'tiny_mce_before_init', 10, 1 ),
+		'register_setting'      => array( 'admin_init', 10, 0 ),
+		'register_settings'     => array( 'admin_init', 10, 0 ),
+		'add_page_to_menu'      => array('admin_menu', 0),
 	);
 
 	// =========================
@@ -56,6 +56,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Processes configuration options and sets up necessary hooks/callbacks.
 	 *
+	 * @since 1.1.0 Added tinymce key; mce is deprecated.
 	 * @since 1.0.0
 	 *
 	 * @param array $configs The theme configuration options.
@@ -97,6 +98,7 @@ class Setup extends \SmartPlugin {
 						Hooks::backend_enqueue( $value['backend'] );
 					}
 				break;
+				case 'tinymce':
 				case 'mce':
 					// Enable buttons if set
 					if(isset($value['buttons'])){
@@ -245,17 +247,17 @@ class Setup extends \SmartPlugin {
 		// Loop through each post_type, check for supports, taxonomies or meta_boxes
 		foreach ( $configs['post_types'] as $post_type => &$pt_args ) {
 			make_associative( $post_type, $pt_args );
-			
+
 			// Force theme and post type supports into array form
 			csv_array_ref( $configs['supports'] );
 			csv_array_ref( $pt_args['supports'] );
-			
+
 			// Check if this post type uses thumbnails, and
 			// make sure the theme supports includes it
 			if ( in_array( 'thumbnail', $pt_args['supports'] ) && ! in_array( 'post-thumbnails', $configs['supports'] ) ) {
 				$configs['supports'][] = 'post-thumbnails';
 			}
-			
+
 			if ( isset( $pt_args['taxonomies'] ) ) {
 				// Loop through each taxonomy, move it to $taxonomies if not registered yet
 				foreach ( $pt_args['taxonomies'] as $taxonomy => $tx_args ) {
@@ -434,14 +436,20 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Now that it's registered, see if there are preloaded terms to add
-		if ( isset( $args['preload'] ) ) {
-			csv_array_ref( $args['preload'] );
+		if ( isset( $args['preload'] ) && is_array( $args['preload'] ) ) {
+			$is_assoc = is_assoc( $args['preload'] );
+
 			foreach ( $args['preload'] as $term => $args ) {
 				// Check if the term was added numerically on it's own
-				make_associative( $term, $args );
+				if ( $is_assoc ) {
+					$term = $args;
+					$args = array();
+				}
 
 				// Check if it exists, skip if so
-				if ( get_term_by( 'name', $term, $taxonomy ) ) continue;
+				if ( get_term_by( 'name', $term, $taxonomy ) ) {
+					continue;
+				}
 
 				// Insert the term
 				wp_insert_term( $term, $taxonomy, $args );
@@ -542,6 +550,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Setup the save hook for the meta box
 	 *
+	 * @since 1.1.1 Fixed typo causing $args['fields'] saving to save the $_POST key, not the value.
 	 * @since 1.0.0
 	 *
 	 * @param string $post_id  The ID of the post being saved. (skip when saving the hook)
@@ -576,7 +585,8 @@ class Setup extends \SmartPlugin {
 
 			// Alternately/Additionally, see if a save_fields list is set, and save each one if so
 			if ( isset( $args['save_fields'] ) ) {
-				foreach ( (array) $args['save_fields'] as $meta_key => $field ) {
+				csv_array_ref( $args['save_fields'] );
+				foreach ( $args['save_fields'] as $meta_key => $field ) {
 					if ( is_int( $meta_key ) ) {
 						$meta_key = $field;
 					}
@@ -607,7 +617,7 @@ class Setup extends \SmartPlugin {
 					}
 				}
 
-				update_post_meta( $post_id, $meta_key, $post_key );
+				update_post_meta( $post_id, $meta_key, $_POST[ $post_key ] );
 			}
 		}
 	}
@@ -621,7 +631,8 @@ class Setup extends \SmartPlugin {
 	 * @param array  $args     The arguments from registration.
 	 */
 	public function _add_meta_box( $meta_box, $args ) {
-		foreach ( (array) $args['post_type'] as $post_type ) {
+		$post_types = csv_array( $args['post_type'] );
+		foreach ( $post_types as $post_type ) {
 			add_meta_box(
 				$meta_box,
 				$args['title'],
@@ -731,6 +742,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Proccess the theme setups; registering the various features and supports.
 	 *
+	 * @since 1.1.0 'menus' is now 'nav_menus', $defaults['sidebars'] is now $defaults['sidebar'].
 	 * @since 1.0.0
 	 *
 	 * @param array &$configs Optional. The features and supports for the theme.
@@ -755,7 +767,7 @@ class Setup extends \SmartPlugin {
 			}
 		}
 
-		// Custom image sizes
+		// Custom image sizes(s)
 		if ( isset( $configs['image_sizes'] ) ) {
 			foreach( $configs['image_sizes'] as $name => $specs ) {
 				list( $width, $height, $crop ) = $specs + array( 0, 0, false );
@@ -763,14 +775,14 @@ class Setup extends \SmartPlugin {
 			}
 		}
 
-		// Editor style sheet(s)
+		// Editor style(s)
 		if ( isset( $configs['editor_style'] ) ) {
 			add_editor_style( $configs['editor_style'] );
 		}
 
 		// Navigation menus
-		if ( isset( $configs['menus'] ) ) {
-			register_nav_menus( $configs['menus'] );
+		if ( isset( $configs['nav_menus'] ) ) {
+			register_nav_menus( $configs['nav_menus'] );
 		}
 
 		// Sidebars
@@ -778,8 +790,8 @@ class Setup extends \SmartPlugin {
 			$defaults = null;
 
 			// Prep defaults, if present
-			if ( isset( $this->defaults['sidebars'] ) ) {
-				$defaults = $this->defaults['sidebars'];
+			if ( isset( $this->defaults['sidebar'] ) ) {
+				$defaults = $this->defaults['sidebar'];
 				$find = '/.*<(\w+).*>.*/';
 				$replace = '$1';
 
@@ -989,6 +1001,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register and build a setting
 	 *
+	 * @since 1.1.0 Dropped stupid $args['fields'] processing.
 	 * @since 1.0.0
 	 *
 	 * @param string       $setting The id of the setting to register
@@ -1001,9 +1014,8 @@ class Setup extends \SmartPlugin {
 
 		// Default arguments
 		$default_args = array(
-			'title'           => make_legible( $setting ),
-			'sanitize'        => null,
-			'wrap_with_label' => false, // since the label should be taken care of automatically when adding the field
+			'title'    => make_legible( $setting ),
+			'sanitize' => null
 		);
 
 		// Default $section to 'default'
@@ -1022,32 +1034,29 @@ class Setup extends \SmartPlugin {
 		// Build the $fields array based on provided data
 		if ( isset( $args['field'] ) ) {
 			// A single field is provided, the name of the setting is also the name of the field
-			if ( ! isset( $args['field']['wrap_with_label'] ) ) {
-				// Auto set _label to false if not present already
+
+			// Default the wrap_with_label argument to false if applicable
+			if ( ! is_callable( $args['field'] ) && is_array( $args['field'] ) && ! isset( $args['field']['wrap_with_label'] ) ) {
+				// Auto set wrap_with_label to false if not present already
 				$args['field']['wrap_with_label'] = false;
 			}
-			$fields = array(
+
+			// Create a fields entry
+			$args['fields'] = array(
 				$setting => $args['field'],
 			);
-		} elseif ( isset( $args['fields'] ) ) {
-			// An array of fields is provided, run through and rewrite the names to be in $setting[$name] style
-			$fields = array();
-			foreach ( $args['fields'] as $name => $field ) {
-				// Rebuild the field names based on ID; array style
-				$name = preg_replace( '/^([^\[\]]+)(\[.+?\])?$/', $setting . '[$1]$2', $name );
-				$fields[ $name ] = $field;
-			}
-		} else {
-			// Assume $args is the literal arguments for the field
-			$fields = array(
+		} elseif ( ! isset( $args['fields'] ) ) {
+			// Assume $args is the literal arguments for the field,
+			// create a fields entry
+			$args['fields'] = array(
 				$setting => $args,
 			);
 		}
 
 		// Set the current arguments
 		$_args = array(
-			'fields' => $fields,
-			'post'   => false,
+			'fields' => $args['fields'],
+			'data'   => null,
 			'echo'   => true,
 			'__extract',
 		);
@@ -1149,7 +1158,7 @@ class Setup extends \SmartPlugin {
 		// Run through each section, add them, and register the settings for them
 		if ( isset( $args['sections'] ) ) {
 			foreach ( $args['sections'] as $id => $section ) {
-				add_settings_section( $id, $section['title'], $args['callback'], $page );
+				add_settings_section( $id, $section['title'], $section['callback'], $page );
 				if ( isset( $section['fields'] ) ) {
 					$this->_register_settings( $section['fields'], $id, $page );
 				}
@@ -1163,14 +1172,15 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Run through any submenus in this page and set them up
-		if ( isset( $args['submenu'] ) ) {
-			$this->_register_page_settings( $args['submenu'] );
+		if ( isset( $args['children'] ) ) {
+			$this->_register_page_settings( $args['children'] );
 		}
 	}
 
 	/**
 	 * Register the settings for this page
 	 *
+	 * @since 1.1.0 'submenus' is no 'children'
 	 * @since 1.0.0
 	 *
 	 * @param string $setting The id of the page to register
@@ -1203,7 +1213,7 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Defaut the type to menu if not a valid type
-		if ( ! in_array( $type, array( 'menu', 'object', 'helper' ) ) ) {
+		if ( ! in_array( $type, array( 'menu', 'object', 'utility' ) ) ) {
 			$args['type'] == 'menu';
 		}
 
@@ -1228,8 +1238,8 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Run through any submenus in this page and set them up
-		if ( isset( $args['submenu'] ) ) {
-			$this->_add_page_to_menu( $args['submenu'], $page );
+		if ( isset( $args['children'] ) ) {
+			$this->_add_page_to_menu( $args['children'], $page );
 		}
 	}
 }
