@@ -550,6 +550,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Setup the save hook for the meta box
 	 *
+	 * @since 1.1.1 Fixed typo causing $args['fields'] saving to save the $_POST key, not the value.
 	 * @since 1.0.0
 	 *
 	 * @param string $post_id  The ID of the post being saved. (skip when saving the hook)
@@ -616,7 +617,7 @@ class Setup extends \SmartPlugin {
 					}
 				}
 
-				update_post_meta( $post_id, $meta_key, $post_key );
+				update_post_meta( $post_id, $meta_key, $_POST[ $post_key ] );
 			}
 		}
 	}
@@ -1033,13 +1034,13 @@ class Setup extends \SmartPlugin {
 		// Build the $fields array based on provided data
 		if ( isset( $args['field'] ) ) {
 			// A single field is provided, the name of the setting is also the name of the field
-			
+
 			// Default the wrap_with_label argument to false if applicable
 			if ( ! is_callable( $args['field'] ) && is_array( $args['field'] ) && ! isset( $args['field']['wrap_with_label'] ) ) {
 				// Auto set wrap_with_label to false if not present already
 				$args['field']['wrap_with_label'] = false;
 			}
-			
+
 			// Create a fields entry
 			$args['fields'] = array(
 				$setting => $args['field'],
