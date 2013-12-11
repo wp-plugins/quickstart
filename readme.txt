@@ -3,7 +3,7 @@ Contributors: dougwollison
 Tags: development, function, utility, utilities, framework, code, coding
 Requires at least: 3.5
 Tested up to: 3.7.x
-Stable tag: 1.0.0
+Stable tag: 1.1.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -23,5 +23,17 @@ QuickStart is an ever expanding utility kit of handy functions, callbacks and to
 
 **Details on each release can be found [on the GitHub releases page](https://github.com/dougwollison/quickstart/releases) for this project.**
 
-= 1.0 =
+= 1.1.3 =
+Fixed issue with wrap_with_label setting, also cleaned up QuickStart\Form.
+
+= 1.1.2 =
+Fixed preloading when passing a numeric array of terms.
+
+= 1.1.1 =
+Fixed save_meta_box issue when saving field data.
+
+= 1.1.0 =
+Bug fixes, key changes, documented example code.
+
+= 1.0.0 =
 Initial public release.
