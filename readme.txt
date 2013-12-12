@@ -2,7 +2,7 @@
 Contributors: dougwollison
 Tags: development, function, utility, utilities, framework, code, coding
 Requires at least: 3.5
-Tested up to: 3.7.x
+Tested up to: 3.8.x
 Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
