@@ -254,6 +254,7 @@ class Setup extends \SmartPlugin {
 	 * Proccess the content setups; extracting any taxonomies/meta_boxes defined
 	 * within a post_type configuration.
 	 *
+	 * @since 1.3.3 Removed callback chek on feature args.
 	 * @since 1.2.0 Added check for dumb metabox setup
 	 * @since 1.0.0
 	 *
@@ -297,9 +298,10 @@ class Setup extends \SmartPlugin {
 						// Add this post type to the post_types argument to this taxonomy
 						$tx_args['post_type'] = array( $post_type );
 
-						// Add this taxonomy to $taxonomies, remove from this post type
-						$configs['taxonomies'][ $taxonomy ] = $tx_args;
-						unset( $pt_args['taxonomies'][ $taxonomy ] );
+						// Add this feauture to features list
+						$configs['taxonomies'][ $taxonomy ] = $ft_args;
+						//and remove from this post type
+						unset( $tx_args['taxonomies'][ $taxonomy ] );
 					}
 				}
 			}
@@ -321,8 +323,9 @@ class Setup extends \SmartPlugin {
 					// Add this post type to the post_types argument to this meta box
 					$mb_args['post_type'] = array( $post_type );
 
-					// Add this taxonomy to $taxonomies, remove from this post type
-					$configs['meta_boxes'][ $meta_box ] = $mb_args;
+					// Add this feauture to features list
+					$configs['meta_boxes'][ $meta_box ] = $ft_args;
+					//and remove from this post type
 					unset( $pt_args['meta_boxes'][ $meta_box ] );
 				}
 			}
@@ -330,21 +333,15 @@ class Setup extends \SmartPlugin {
 			if ( isset( $pt_args['features'] ) ) {
 				csv_array_ref( $pt_args['features'] );
 				foreach ( $pt_args['features'] as $feature => $ft_args ) {
-					// Fix if dumb metabox was passed (numerically, not associatively)
+					// Fix if dumb feature was passed (numerically, not associatively)
 					make_associative( $feature, $ft_args );
-
-					// Check if the arguments are a callable, restructure to proper form
-					if ( is_callable( $ft_args ) ) {
-						$ft_args = array(
-							'fields' => $ft_args,
-						);
-					}
 
 					// Add this post type to the post_types argument to this meta box
 					$ft_args['post_type'] = array( $post_type );
 
-					// Add this taxonomy to $taxonomies, remove from this post type
+					// Add this feauture to features list
 					$configs['features'][ $feature ] = $ft_args;
+					//and remove from this post type
 					unset( $ft_args['features'][ $feature ] );
 				}
 			}
@@ -519,6 +516,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested meta box.
 	 *
+	 * @since 1.3.3 Fixed bug with single field expansion
 	 * @since 1.2.0 Moved dumb metabox logic to self::make_dumb_metabox()
 	 * @since 1.0.0
 	 *
@@ -541,7 +539,7 @@ class Setup extends \SmartPlugin {
 			}
 
 			$args['fields'] = array(
-				$id => $field,
+				$meta_box => $field,
 			);
 		}
 
@@ -1215,6 +1213,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the settings for this page
 	 *
+	 * @since 1.3.3 Fixed submenu registration for custom post types.
 	 * @since 1.3.0 Reworked processing, now supports passing a file and no callback/function
 	 * @since 1.2.0 Moved child page registration to Setup::register_page()
 	 * @since 1.1.0 'submenus' is now 'children'
@@ -1277,6 +1276,15 @@ class Setup extends \SmartPlugin {
 				$func_args = array( $page_title, $menu_title, $capability, $slug, $callback );
 			} else {
 				$function = 'add_submenu_page';
+
+				if ( post_type_exists( $parent ) ) {
+					if ( $parent == 'post' ) {
+						$parent = 'edit.php';
+					} else {
+						$parent = "edit.php?post_type=$parent";
+					}
+				}
+
 				$func_args = array( $parent, $page_title, $menu_title, $capability, $slug, $callback );
 			}
 		}
