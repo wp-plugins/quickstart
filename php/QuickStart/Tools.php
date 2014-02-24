@@ -28,6 +28,7 @@ class Tools {
 	/**
 	 * Actually build a meta_box, either calling the callback or running the build_fields Form method.
 	 *
+	 * @since 1.3.0 Added option of callback key instead of fields for a callback.
 	 * @since 1.0.0
 	 * @uses Form::build_fields()
 	 *
@@ -41,15 +42,25 @@ class Tools {
 
 		// Print nonce field
 		wp_nonce_field( $id, "_qsnonce-$id" );
+		
+		// Determine the callback or fields argument
+		$callback = $fields = null;
+		if ( isset( $args['callback'] ) ) {
+			$callback = $args['callback'];
+		} elseif ( is_callable( $args['fields'] ) ) {
+			$callback = $args['fields'];
+		} elseif ( isset( $args['fields'] ) ) {
+			$fields = $args['fields'];
+		}
 
 		// Wrap in container for any specific targeting needed
 		echo '<div class="qs-meta-box">';
-			if ( is_callable( $args['fields'] ) ) {
-				// Call the function, passing the post, the metabox args, and the id if it's needed
-				call_user_func( $args['fields'], $post, $args, $id );
-			} else {
+			if ( $callback ) {
+				// Pass the post, metabox args, and id if it's needed
+				call_user_func( $callback, $post, $args, $id );
+			} elseif ( isset( $args['fields'] ) ) {
 				// Build the fields
-				Form::build_fields( $args['fields'], $post, true );
+				Form::build_fields( $fields, $post, true );
 			}
 		echo '</div>';
 	}
@@ -200,6 +211,50 @@ class Tools {
 		wp_update_attachment_metadata( $attachment_id, $attachment_data );
 
 		return $attachment_id;
+	}
+	
+	/**
+	 * Run the appropriate checks to make sure that
+	 * this save_post callback should proceed.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param int          $post_id     The ID of the post being saved.
+	 * @param string|array $post_type   The expected post type(s).
+	 * @param string       $nonce_name  Optional the name of the nonce field to check.
+	 * @param string       $nonce_value Optional the value of the nonce field to check.
+	 *
+	 * @return bool Wether or not to proceed.
+	 */
+	public static function save_post_check( $post_id, $post_type = null, $nonce_name = null, $nonce_value = null ) {
+		// Load the posted post type
+		$post_type_obj = get_post_type_object( $_POST['post_type'] );
+		
+		// Default post_type and nonce checks to true
+		$post_type_check = $nonce_check = true;
+		
+		// If post type is provided, check it
+		if ( ! is_null( $post_type ) ) {
+			csv_array_ref( $post_type );
+			$post_type_check = in_array( $post_type_obj->name, $post_type );
+		}
+		
+		// If nonce name & value are passed, check it
+		if ( ! is_null( $nonce_name ) ) {
+			$nonce_check = isset( $_POST[ $nonce_name ] ) && wp_verify_nonce( $_POST[ $nonce_name ], $nonce_value );
+		}
+		
+		// Check for autosave and post revisions
+		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) ||
+			wp_is_post_revision( $post_id ) ||
+			// Check post type and nonce (if provided)
+			! $post_type_check || ! $nonce_check ||
+			// Check for capability to edit this post
+			! current_user_can( $post_type_obj->cap->edit_post ) ) {
+			return false;
+		}
+		
+		return true;
 	}
 
 	// =========================

@@ -31,6 +31,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * A list of internal methods and their hooks configurations are.
 	 *
+	 * @since 1.1.4 Added regster_page_setting(s) entries.
 	 * @since 1.0.0
 	 * @access protected
 	 * @var array
@@ -226,9 +227,35 @@ class Setup extends \SmartPlugin {
 	}
 
 	/**
+	 * Process the metabox args to define a dumb metabox.
+	 * (simple text field with no label)
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param array  $args The metabox arguments.
+	 * @param string $name The name of the metabox the args belong to.
+	 *
+	 * @return array The processed $args.
+	 */
+	protected static function make_dumb_metabox( $args, $name ) {
+		$args = (array) $args;
+
+		$args['fields'] = array(
+			$name => array(
+				'class'           => 'widefat',
+				'wrap_with_label' => false,
+			),
+		);
+
+		return $args;
+	}
+
+	/**
 	 * Proccess the content setups; extracting any taxonomies/meta_boxes defined
 	 * within a post_type configuration.
 	 *
+	 * @since 1.3.3 Removed callback chek on feature args.
+	 * @since 1.2.0 Added check for dumb metabox setup
 	 * @since 1.0.0
 	 *
 	 * @param array &$configs Optional. The post types, taxonomies and meta boxes to setup.
@@ -271,8 +298,9 @@ class Setup extends \SmartPlugin {
 						// Add this post type to the post_types argument to this taxonomy
 						$tx_args['post_type'] = array( $post_type );
 
-						// Add this taxonomy to $taxonomies, remove from this post type
+						// Add this feauture to features list
 						$configs['taxonomies'][ $taxonomy ] = $tx_args;
+						//and remove from this post type
 						unset( $pt_args['taxonomies'][ $taxonomy ] );
 					}
 				}
@@ -288,13 +316,16 @@ class Setup extends \SmartPlugin {
 						$mb_args = array(
 							'fields' => $mb_args,
 						);
+					} elseif ( empty( $mb_args ) ) { // Also check if empty args, make dumb metabox if so
+						$mb_args = self::make_dumb_metabox( $mb_args, $meta_box );
 					}
 
 					// Add this post type to the post_types argument to this meta box
 					$mb_args['post_type'] = array( $post_type );
 
-					// Add this taxonomy to $taxonomies, remove from this post type
+					// Add this feauture to features list
 					$configs['meta_boxes'][ $meta_box ] = $mb_args;
+					//and remove from this post type
 					unset( $pt_args['meta_boxes'][ $meta_box ] );
 				}
 			}
@@ -302,22 +333,16 @@ class Setup extends \SmartPlugin {
 			if ( isset( $pt_args['features'] ) ) {
 				csv_array_ref( $pt_args['features'] );
 				foreach ( $pt_args['features'] as $feature => $ft_args ) {
-					// Fix if dumb metabox was passed (numerically, not associatively)
+					// Fix if dumb feature was passed (numerically, not associatively)
 					make_associative( $feature, $ft_args );
-
-					// Check if the arguments are a callable, restructure to proper form
-					if ( is_callable( $ft_args ) ) {
-						$ft_args = array(
-							'fields' => $ft_args,
-						);
-					}
 
 					// Add this post type to the post_types argument to this meta box
 					$ft_args['post_type'] = array( $post_type );
 
-					// Add this taxonomy to $taxonomies, remove from this post type
+					// Add this feauture to features list
 					$configs['features'][ $feature ] = $ft_args;
-					unset( $ft_args['features'][ $feature ] );
+					//and remove from this post type
+					unset( $pt_args['features'][ $feature ] );
 				}
 			}
 		}
@@ -332,6 +357,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested post_type.
 	 *
+	 * @since 1.2.0 Added use of save argument for general save_post callback.
 	 * @since 1.0.0
 	 *
 	 * @param string $post_type The slug of the post type to register.
@@ -364,6 +390,11 @@ class Setup extends \SmartPlugin {
 		// Now, register the post type
 		register_post_type( $post_type, $args );
 
+		// If a save hook is passed, register it
+		if ( isset( $args['save'] ) ) {
+			add_action( 'save_post', $args['save'] );
+		}
+
 		// Now that it's registered, fetch the resulting show_in_menu argument,
 		// and add the post_type_count hook if true
 		if ( get_post_type_object( $post_type )->show_in_menu ){
@@ -390,6 +421,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested taxonomy.
 	 *
+	 * @since 1.3.1 Removed Hooks::taxonomy_count call.
 	 * @since 1.0.0
 	 *
 	 * @param string $taxonomy The slug of the taxonomy to register.
@@ -459,9 +491,8 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Now that it's registered, fetch the resulting show_ui argument,
-		// and add the taxonomy_count and taxonomy_filter hooks if true
+		// and add the taxonomy_filter hooks if true
 		if ( $taxonomy_obj->show_ui ){
-			Hooks::taxonomy_count( $taxonomy );
 			Hooks::taxonomy_filter( $taxonomy );
 		}
 	}
@@ -485,6 +516,8 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested meta box.
 	 *
+	 * @since 1.3.3 Fixed bug with single field expansion
+	 * @since 1.2.0 Moved dumb metabox logic to self::make_dumb_metabox()
 	 * @since 1.0.0
 	 *
 	 * @param string $meta_box The slug of the meta box to register.
@@ -493,17 +526,10 @@ class Setup extends \SmartPlugin {
 	public function register_meta_box( $meta_box, $args ) {
 		if ( is_callable( $args ) ) { // A callback, recreate into proper array
 			$args = array(
-				'fields' => $args,
+				'callback' => $args,
 			);
 		} elseif ( empty( $args ) ) { // Empty array; make dumb meta box
-			$args = array(
-				'fields' => array(
-					$meta_box => array(
-						'class'           => 'full-width-text',
-						'wrap_with_label' => false,
-					)
-				)
-			);
+			$args = self::make_dumb_metabox( $args, $meta_box );
 		} elseif ( isset( $args['field'] ) ) { // Single field passed, recreate into proper array
 			$field = $args['field'];
 
@@ -513,7 +539,7 @@ class Setup extends \SmartPlugin {
 			}
 
 			$args['fields'] = array(
-				$id => $field,
+				$meta_box => $field,
 			);
 		}
 
@@ -552,28 +578,16 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Setup the save hook for the meta box
 	 *
+	 * @since 1.2.0 Moved save check functionality to Tools::save_post_check().
 	 * @since 1.1.1 Fixed typo causing $args['fields'] saving to save the $_POST key, not the value.
 	 * @since 1.0.0
 	 *
-	 * @param string $post_id  The ID of the post being saved. (skip when saving the hook)
+	 * @param int    $post_id  The ID of the post being saved. (skip when saving the hook)
 	 * @param string $meta_box The slug of the meta box to register.
 	 * @param array  $args     The arguments from registration.
 	 */
 	public function _save_meta_box( $post_id, $meta_box, $args ) {
-		$nonce = "_qsnonce-$meta_box";
-		$post_type = get_post_type_object( $_POST['post_type'] );
-
-		// Check for autosave and post revisions
-		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) ||
-			wp_is_post_revision( $post_id ) ||
-			// Make sure the post type is correct
-			! in_array( $_POST['post_type'], (array) $args['post_type'] ) ||
-			// Check the nonce for this metabox
-			! isset( $_POST[ $nonce ] ) || ! wp_verify_nonce( $_POST[ $nonce ], $meta_box ) ||
-			// Check for capability to edit this post
-			! current_user_can( $post_type->cap->edit_post ) ) {
-			return;
-		}
+		if ( ! Tools::save_post_check( $post_id, $args['post_type'], "_qsnonce-$meta_box", $meta_box ) ) return;
 
 		// Proceed with saving, determining appropriate method to use
 		if ( isset( $args['save'] ) && is_callable( $args['save'] ) ) {
@@ -788,7 +802,7 @@ class Setup extends \SmartPlugin {
 		}
 
 		// Sidebars
-		if ( isset( $setups['sidebars'] ) ) {
+		if ( isset( $configs['sidebars'] ) ) {
 			$defaults = null;
 
 			// Prep defaults, if present
@@ -805,7 +819,7 @@ class Setup extends \SmartPlugin {
 				}
 			}
 
-			foreach ( $setups['sidebars'] as $id => $args ) {
+			foreach ( $configs['sidebars'] as $id => $args ) {
 				$args['id'] = $id;
 
 				// Process args with defaults, it present
@@ -902,13 +916,14 @@ class Setup extends \SmartPlugin {
 	 * @return $plugins The modified plugins array.
 	 */
 	public function _add_mce_plugin( $plugins, $plugin, $src ) {
-		$plugin_array[ $plugin ] = $src;
-		return $plugin_array;
+		$plugins[ $plugin ] = $src;
+		return $plugins;
 	}
 
 	/**
 	 * Register an MCE Plugin/Button
 	 *
+	 * @since 1.2.0 Removed separator before each button.
 	 * @since 1.0.0
 	 *
 	 * @param string $plugin The slug of the MCE plugin to be registered
@@ -932,7 +947,7 @@ class Setup extends \SmartPlugin {
 
 				// Add the button to the appropriate row
 				$method = 'add_mce_buttons' . ( $row > 1 ? "_$row" : '');
-				$this->$method( array( '|', $button ) ); // Aslo add a seperator before it
+				$this->$method( $button );
 			}
 
 			$this->add_mce_plugin( $plugin, $src );
@@ -942,16 +957,27 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register multiple MCE Plugins/Buttons
 	 *
+	 * @since 1.2.0 Revised $args logic and flexibility.
 	 * @since 1.0.0
 	 *
 	 * @param array $plugins The list of MCE plugins to be registered
 	 */
 	public function register_mce_plugins( $plugins ) {
-		if( is_array( $plugins) ) {
+		if( is_array( $plugins ) ) {
 			foreach( $plugins as $plugin => $args ) {
-				list( $src, $button, $row ) = fill_array( $args, 3 );
+				$src = $button = $row = null;
 
-				if ( ! $button ) $button = $plugin;
+				// $args can be a source string or an arguments array
+				if ( ! is_array( $args ) ) {
+					$button = true; // By default, any plugin will have a button by the same name
+					$src = $args;
+				} elseif ( is_assoc( $args ) ) {
+					extract( $args );
+				} else {
+					list( $src, $button, $row ) = fill_array( $args, 3 );
+				}
+
+				// Default value for row
 				if ( ! $row ) $row = 1;
 
 				$this->register_mce_plugin( $plugin, $src, $button, $row );
@@ -1003,6 +1029,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register and build a setting
 	 *
+	 * @since 1.3.0 Added 'wrap' to build_fields $args.
 	 * @since 1.1.0 Dropped stupid $args['fields'] processing.
 	 * @since 1.0.0
 	 *
@@ -1060,6 +1087,7 @@ class Setup extends \SmartPlugin {
 			'fields' => $args['fields'],
 			'data'   => null,
 			'echo'   => true,
+			'wrap'   => false,
 			'__extract',
 		);
 
@@ -1113,14 +1141,15 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register and build a page
 	 *
+	 * @since 1.2.0 Added child page registration from other methods.
 	 * @since 1.0.0
 	 *
 	 * @uses Setup::register_page_settings()
 	 * @uses Setup::add_page_to_menu()
 	 *
-	 * @param string $setting The id of the page to register
-	 * @param array  $args    The page configuration
-	 * @param string $parent  Optional The id of the group this setting belongs to
+	 * @param string $setting The id of the page to register.
+	 * @param array  $args    The page configuration.
+	 * @param string $parent  Optional The slug of the parent page.
 	 */
 	public function register_page( $page, $args, $parent = null ) {
 		// Add settings for the page
@@ -1128,6 +1157,11 @@ class Setup extends \SmartPlugin {
 
 		// Now, add this page to the admin menu
 		$this->add_page_to_menu( $page, $args, $parent );
+
+		// Run through any submenus in this page and set them up
+		if ( isset( $args['children'] ) ) {
+			$this->register_page( $args['children'], $page );
+		}
 	}
 
 	/**
@@ -1137,8 +1171,8 @@ class Setup extends \SmartPlugin {
 	 *
 	 * @uses Setup::register_page()
 	 *
-	 * @param array  $settings An array of pages to register
-	 * @param string $parent   Optional The id of the page this one is a childe of
+	 * @param array  $settings An array of pages to register.
+	 * @param string $parent   Optional The id of the page these are children of.
 	 */
 	public function register_pages( $pages, $parent = null ) {
 		foreach ( $pages as $page => $args ) {
@@ -1149,6 +1183,8 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the settings for this page
 	 *
+	 * @since 1.3.0 Reordered so bare fields go before sections.
+	 * @since 1.2.0 Moved child page registration to Setup::register_page()
 	 * @since 1.0.0
 	 *
 	 * @uses Setup::register_settings()
@@ -1157,6 +1193,12 @@ class Setup extends \SmartPlugin {
 	 * @param array  $args    The page configuration
 	 */
 	public function _register_page_settings( $page, $args ) {
+		// Run through any bare fields (assume belonging to default, which will be added automatically)
+		if ( isset( $args['fields'] ) ) {
+			add_settings_section('default', null, null, $page);
+			$this->_register_settings( $args['fields'], 'default', $page );
+		}
+
 		// Run through each section, add them, and register the settings for them
 		if ( isset( $args['sections'] ) ) {
 			foreach ( $args['sections'] as $id => $section ) {
@@ -1166,36 +1208,29 @@ class Setup extends \SmartPlugin {
 				}
 			}
 		}
-
-		// Run through any bare fields (assume belonging to default, which will be added automatically)
-		if ( isset( $args['fields'] ) ) {
-			add_settings_section('default', null, null, $page);
-			$this->_register_settings( $args['fields'], 'default', $page );
-		}
-
-		// Run through any submenus in this page and set them up
-		if ( isset( $args['children'] ) ) {
-			$this->_register_page_settings( $args['children'] );
-		}
 	}
 
 	/**
 	 * Register the settings for this page
 	 *
-	 * @since 1.1.0 'submenus' is no 'children'
+	 * @since 1.3.3 Fixed submenu registration for custom post types.
+	 * @since 1.3.0 Reworked processing, now supports passing a file and no callback/function
+	 * @since 1.2.0 Moved child page registration to Setup::register_page()
+	 * @since 1.1.0 'submenus' is now 'children'
 	 * @since 1.0.0
 	 *
 	 * @param string $setting The id of the page to register
 	 * @param array  $args    The page configuration
 	 */
-	public function _add_page_to_menu( $page, $args, $parent ) {
-		$_parent = $parent;
-
+	public function _add_page_to_menu( $page, $args, $parent = null ) {
 		$default_args = array(
-			'title'      => make_legible( $page ),
 			'type'       => 'menu',
+			'title'      => make_legible( $page ),
+			'slug'       => $page,
 			'capability' => 'manage_options',
 			'callback'   => array( __NAMESPACE__ . '\Callbacks', 'default_admin_page' ),
+			'icon'       => '',
+			'position'   => null,
 		);
 
 		// Parse the arguments with the defaults
@@ -1209,39 +1244,52 @@ class Setup extends \SmartPlugin {
 			$args['page_title'] = $args['menu_title'];
 		}
 
-		// Set the parent if provided
+		// Override the parent if provided
 		if ( ! empty( $args['parent'] ) ) {
-			$_parent = $args['parent'];
+			$parent = $args['parent'];
 		}
 
-		// Defaut the type to menu if not a valid type
-		if ( ! in_array( $type, array( 'menu', 'object', 'utility' ) ) ) {
+		// Defaut the type to menu if not a level type
+		$levels = array( 'object', 'utility' );
+		if ( ! in_array( $args['type'], $levels ) ) {
 			$args['type'] == 'menu';
 		}
 
-		if ( ! empty( $_parent ) ) {
-			// Submenu page, create function based on parent
-			$func = 'add_' . $_parent . '_page';
-			if ( function_exists( $func ) ) {
-				// Parent is one of the main menu items, call the specific function for it
-				$func( $args['page_title'], $args['menu_title'], $args['capability'], $page, $args['callback'] );
-			} else {
-				// Check if parent is a post type, set slug accordingly
-				if ( post_type_exists( $_parent ) ) {
-					$_parent = 'edit.php?post_type=' . $_parent;
-				}
-				// Otherwise, treat parent slug as literal
-				add_submenu_page( $_parent, $args['page_title'], $args['menu_title'], $args['capability'], $page, $args['callback'] );
+		// Extract $args
+		extract( $args, EXTR_SKIP );
+
+		// Determine function name and arguments...
+		if ( empty( $parent ) ) {
+			// Top level page, call add_{type}_page
+			$function = 'add_' . $type . '_page';
+			$func_args = array( $page_title, $menu_title, $capability, $slug, $callback, $icon );
+
+			// Add $position for add_menu_page
+			if ( $type == 'menu' ) {
+				$func_args[] = $position;
 			}
 		} else {
-			// Top level page, call appropriate function based on type
-			$func = 'add_' . $args['type'] . '_page';
-			$func( $args['page_title'], $args['menu_title'], $args['capability'], $page, $args['callback'], $args['icon'], $args['position'] );
+			// Submenu page, see if it's one of the builtin menus
+			$builtin = array( 'dashboard', 'posts', 'media', 'links', 'pages', 'comments', 'theme', 'plugins', 'users', 'management', 'options' );
+			if ( in_array( $parent, $builtin ) ) {
+				$function = 'add_' . $parent . '_page';
+				$func_args = array( $page_title, $menu_title, $capability, $slug, $callback );
+			} else {
+				$function = 'add_submenu_page';
+
+				if ( post_type_exists( $parent ) ) {
+					if ( $parent == 'post' ) {
+						$parent = 'edit.php';
+					} else {
+						$parent = "edit.php?post_type=$parent";
+					}
+				}
+
+				$func_args = array( $parent, $page_title, $menu_title, $capability, $slug, $callback );
+			}
 		}
 
-		// Run through any submenus in this page and set them up
-		if ( isset( $args['children'] ) ) {
-			$this->_add_page_to_menu( $args['children'], $page );
-		}
+		// Call the determined function with the determined arguments
+		call_user_func_array( $function, $func_args );
 	}
 }
