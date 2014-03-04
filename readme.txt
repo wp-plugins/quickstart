@@ -1,9 +1,9 @@
 === QuickStart ===
 Contributors: dougwollison
 Tags: development, function, utility, utilities, framework, code, coding
-Requires at least: 3.5
+Requires at least: 3.8
 Tested up to: 3.8.x
-Stable tag: 1.1.4
+Stable tag: 1.3.5
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,6 +22,27 @@ QuickStart is an ever expanding utility kit of handy functions, callbacks and to
 == Changelog ==
 
 **Details on each release can be found [on the GitHub releases page](https://github.com/dougwollison/quickstart/releases) for this project.**
+
+= 1.3.5 =
+Added smarter handling of metaboxes that use only 1 field, fixed typo that breaks get_values usage.
+
+= 1.3.4 =
+Fixed bug caused by v1.3.3 with taxonomies and meta boxes not registering.
+
+= 1.3.3 =
+Added addfile field type, minor bug fixes with submenus and metaboxes.
+
+= 1.3.2 =
+Fixed bug with sidebars not being registered.
+
+= 1.3.1 =
+Updated post_type_count, dropped taxonomy_count.
+
+= 1.3.0 =
+Revisions to custom page/settings handling, field building, and metabox building. Added disable_quickedit.
+
+= 1.2.0 =
+New php/js tools, metabox saving and plugin registration fixes.
 
 = 1.1.4 =
 Fixed issue with custom page registration.
