@@ -316,7 +316,8 @@ class Setup extends \SmartPlugin {
 						$mb_args = array(
 							'fields' => $mb_args,
 						);
-					} elseif ( empty( $mb_args ) ) { // Also check if empty args, make dumb metabox if so
+					} elseif ( empty( $mb_args ) ) {
+						// Or, if no args passed, make a "dumb" metabox
 						$mb_args = self::make_dumb_metabox( $mb_args, $meta_box );
 					}
 
@@ -516,6 +517,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested meta box.
 	 *
+	 * @since 1.3.5 Added use-args-as-field-args handling
 	 * @since 1.3.3 Fixed bug with single field expansion
 	 * @since 1.2.0 Moved dumb metabox logic to self::make_dumb_metabox()
 	 * @since 1.0.0
@@ -524,13 +526,16 @@ class Setup extends \SmartPlugin {
 	 * @param array  $args     The arguments for registration.
 	 */
 	public function register_meta_box( $meta_box, $args ) {
-		if ( is_callable( $args ) ) { // A callback, recreate into proper array
+		if ( is_callable( $args ) ) {
+			// A callback, recreate into proper array
 			$args = array(
 				'callback' => $args,
 			);
-		} elseif ( empty( $args ) ) { // Empty array; make dumb meta box
+		} elseif ( empty( $args ) ) {
+			// Empty array; make dumb meta box
 			$args = self::make_dumb_metabox( $args, $meta_box );
-		} elseif ( isset( $args['field'] ) ) { // Single field passed, recreate into proper array
+		} elseif ( isset( $args['field'] ) ) {
+			// Single field passed, recreate into proper array
 			$field = $args['field'];
 
 			// Turn off wrapping by default
@@ -540,6 +545,12 @@ class Setup extends \SmartPlugin {
 
 			$args['fields'] = array(
 				$meta_box => $field,
+			);
+		} elseif ( ! isset( $args['fields'] ) && ! isset( $args['callback'] ) ) {
+			// No separate fields list or callback passed;
+			// use meta box args as the field args as well
+			$args['fields'] = array(
+				$meta_box => $args,
 			);
 		}
 
@@ -724,7 +735,8 @@ class Setup extends \SmartPlugin {
 		// Use the provided save callback if provided
 		if ( isset( $args['save'] ) && is_callable( $args['save'] ) ) {
 			$callback = $args['save'];
-		} else { // Otherwise, use the built in one
+		} else {
+			// Otherwise, use the built in one
 			$callback = array( __NAMESPACE__ . '\Features', 'save_menu_order' );
 		}
 
@@ -877,9 +889,11 @@ class Setup extends \SmartPlugin {
 			}
 		}
 
-		if ( is_int( $position ) ) { // Insert at desired position
+		if ( is_int( $position ) ) {
+			// Insert at desired position
 			array_splice( $buttons, $position, 0, $buttons_to_add );
-		} else { // Just append to the end
+		} else {
+			// Just append to the end
 			$buttons = array_merge( $buttons, $buttons_to_add );
 		}
 
