@@ -59,6 +59,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Processes configuration options and sets up necessary hooks/callbacks.
 	 *
+	 * @since 1.4.0 Added helpers css/js backend enqueue.
 	 * @since 1.1.0 Added tinymce key; mce is deprecated.
 	 * @since 1.0.0
 	 *
@@ -130,6 +131,19 @@ class Setup extends \SmartPlugin {
 
 		// Run the theme setups
 		$this->run_theme_setups();
+
+		// Enqueue the general css/js if not already
+		if ( is_admin() && ( ! defined( 'QS_HELPERS_ENQUEUED' ) || ! QS_HELPERS_ENQUEUED ) ) {
+			Hooks::backend_enqueue( array(
+				'css' => array(
+					'qs-helpers-css' => array( plugins_url('/css/QS.helpers.css', QS_FILE ) ),
+				),
+				'js' => array(
+					'qs-helpers-js' => array( plugins_url( '/js/QS.helpers.js', QS_FILE ), array( 'jquery' ) ),
+				),
+			) );
+			define( 'QS_HELPERS_ENQUEUED', true );
+		}
 	}
 
 	// =========================
@@ -547,8 +561,14 @@ class Setup extends \SmartPlugin {
 				$meta_box => $field,
 			);
 		} elseif ( ! isset( $args['fields'] ) && ! isset( $args['callback'] ) ) {
-			// No separate fields list or callback passed;
-			// use meta box args as the field args as well
+			// No separate fields list or callback passed
+
+			// Turn off wrapping by default
+			if ( ! isset( $args['wrap_with_label'] ) ) {
+				$args['wrap_with_label'] = false;
+			}
+
+			// Use meta box args as the field args as well
 			$args['fields'] = array(
 				$meta_box => $args,
 			);
@@ -630,10 +650,11 @@ class Setup extends \SmartPlugin {
 					$field = $settings;
 				}
 
+				// By default, post and meta keys are the same as the field id
 				$post_key = $meta_key = $field;
 
 				if ( is_array( $settings ) ) {
-					// Overide $name with name setting if present
+					// Overide $post_key with name setting if present
 					if ( isset( $settings['name'] ) ) {
 						$post_key = $settings['name'];
 					}
@@ -832,6 +853,23 @@ class Setup extends \SmartPlugin {
 			}
 
 			foreach ( $configs['sidebars'] as $id => $args ) {
+				make_associative($id, $args);
+
+				// If just a string is passed for $args,
+				// assume it's to be the name of the sidebar
+				if ( is_string( $args ) ) {
+					$args = array(
+						'name' => $args,
+					);
+				}
+				// If no args are passed,
+				// Auto create name from $id
+				elseif ( is_array( $args ) && empty( $args ) ) {
+					$args = array(
+						'name' => make_legible( $id ),
+					);
+				}
+
 				$args['id'] = $id;
 
 				// Process args with defaults, it present
@@ -1043,6 +1081,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register and build a setting
 	 *
+	 * @since 1.4.0 Added 'source' to build_fields $args.
 	 * @since 1.3.0 Added 'wrap' to build_fields $args.
 	 * @since 1.1.0 Dropped stupid $args['fields'] processing.
 	 * @since 1.0.0
@@ -1100,6 +1139,7 @@ class Setup extends \SmartPlugin {
 		$_args = array(
 			'fields' => $args['fields'],
 			'data'   => null,
+			'source' => 'option',
 			'echo'   => true,
 			'wrap'   => false,
 			'__extract',
