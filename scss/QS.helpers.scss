@@ -1,0 +1,77 @@
+@import 'utilities';
+
+.qs-field,
+.qs-fieldset{
+	margin-top: 10px;
+}
+
+.qs-field{
+	@extend %clearfix;
+	line-height: 1.5;
+
+	.qs-fieldset &{
+		padding-top: 0;
+	}
+
+	&.generic,
+	&.select{
+		.qs-label{
+			float: left;
+			padding: 5px 0;
+			margin: 0 10px 0 0;
+		}
+	}
+}
+	.qs-label{
+		margin: 0;
+	}
+	.qs-legend{
+		padding: 0 0 2px;
+		margin: 0 0 5px;
+		border-bottom: 1px solid #eee;
+	}
+
+.qs-fieldset{
+	.inputlist{
+		@extend %clearfix;
+		margin: 5px 0 0;
+	}
+
+	// Fields AND Legend Horizontal
+	&.horizontal{
+		.qs-legend,
+		.qs-field,
+		.inputlist{
+			float: left;
+		}
+
+		.qs-legend{
+			margin: 0;
+			padding: 0;
+			border: none;
+		}
+
+		.qs-field,
+		.inputlist{
+			margin: 0 5px;
+		}
+	}
+
+	// Fields-only Horizontal
+	.horizontal{
+		.qs-field{
+			float: left;
+			margin: 0 10px 0 0;
+		}
+	}
+}
+
+.qs-item{
+	@extend %clearfix;
+	background: rgba(#fff, .7);
+	position: relative;
+}
+
+.qs-template{
+	display: none;
+}
