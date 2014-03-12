@@ -1195,6 +1195,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register and build a page
 	 *
+	 * @since 1.4.1 Fixed child page registration.
 	 * @since 1.2.0 Added child page registration from other methods.
 	 * @since 1.0.0
 	 *
@@ -1214,7 +1215,7 @@ class Setup extends \SmartPlugin {
 
 		// Run through any submenus in this page and set them up
 		if ( isset( $args['children'] ) ) {
-			$this->register_page( $args['children'], $page );
+			$this->register_pages( $args['children'], $page );
 		}
 	}
 

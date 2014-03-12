@@ -154,13 +154,14 @@ class Form {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $tag     The tag name.
-	 * @param array  $atts    The tag attributes.
-	 * @param string $content The tag content.
+	 * @param string $tag      The tag name.
+	 * @param array  $atts     The tag attributes.
+	 * @param string $content  The tag content.
+	 * @param string $accepted The attribute whitelist.
 	 *
 	 * @return string The html of the tag.
 	 */
-	public static function build_tag( $tag, $atts, $content = null, $accepted = null ) {
+	public static function build_tag( $tag, $atts, $content = false, $accepted = null ) {
 		if ( is_null( $accepted ) ) {
 			$accepted = static::$accepted_attrs;
 		}
@@ -183,8 +184,10 @@ class Form {
 		}
 
 		if ( is_null( $content ) ) {
+			// Self closing tag
 			$html .= '/>';
 		} else {
+			// Add closing tag
 			$html .= ">$content</$tag>";
 		}
 
@@ -312,6 +315,7 @@ class Form {
 	/**
 	 * Build a single field, based on the passed configuration data.
 	 *
+	 * @since 1.4.1 Updated build_field call to include $source argument.
 	 * @since 1.4.0 Added 'source' argument.
 	 * @since 1.3.0 Added 'wrap' argument.
 	 * @since 1.0.0
@@ -342,7 +346,7 @@ class Form {
 			// Run through each field; key is the field name, value is the settings
 			foreach ( $fields as $field => $settings ) {
 				make_associative( $field, $settings );
-				$html .= static::build_field( $field, $settings, $data, $wrap );
+				$html .= static::build_field( $field, $settings, $data, $source, $wrap );
 			}
 		}
 
@@ -402,6 +406,7 @@ class Form {
 	/**
 	 * Build a checkbox field.
 	 *
+	 * @since 1.4.1 Added modified default value for $wrapper
 	 * @since 1.0.0
 	 *
 	 * @see Form::build_generic()
@@ -410,6 +415,11 @@ class Form {
 		// Default the value to 1 if it's a checkbox
 		if ( $settings['type'] == 'checkbox' && ! isset( $settings['value'] ) ) {
 			$settings['value'] = 1;
+		}
+
+		// Default the wrapper to right sided
+		if ( is_null( $wrapper ) ) {
+			$wrapper = array( 'right' );
 		}
 
 		// If the values match, mark as checked
@@ -526,7 +536,7 @@ class Form {
 
 			$build = "build_$type";
 
-			$items .= static::$build( $item_settings, $value, array('right', 'li') );
+			$items .= static::$build( $item_settings, $value, array( 'right', 'li' ) );
 		}
 
 		$settings['class'][] = 'inputlist';
