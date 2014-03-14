@@ -152,6 +152,7 @@ class Form {
 	/**
 	 * Build an HTML tag.
 	 *
+	 * @since 1.4.2 Updated boolean attribute handling
 	 * @since 1.0.0
 	 *
 	 * @param string $tag      The tag name.
@@ -174,6 +175,12 @@ class Form {
 			} else {
 				// Make sure it's a registerd attribute (or data- attribute)
 				if ( ! in_array( $attr, $accepted ) && strpos( $attr, 'data-' ) !== 0 ) continue;
+				
+				// Convert boolean attribute values (except value)
+				if ( $attr != 'value' && is_bool( $value ) ) {
+					// E.g. multiple="multiple"
+					$value = $value ? $attr : '';
+				}
 
 				if ( is_array( $value ) ) {
 					// Implode into a space separated list
@@ -197,7 +204,8 @@ class Form {
 	/**
 	 * Build a single field, based on the passed configuration data.
 	 *
-	 * @since 1.4.0 Added 'source' argument.
+	 * @since 1.4.2 Added "get_value" and "post_field" option handling.
+	 * @since 1.4.0 Added $source argument.
 	 * @since 1.3.3 Added use of new make_label() method.
 	 * @since 1.3.0 Added $wrap argument for setting default wrap_with_label value,
 	 *				also merged filters into one, and added 'build' callback.
@@ -206,7 +214,7 @@ class Form {
 	 *
 	 * @param string $field    The name/id of the field.
 	 * @param array  $settings The settings to use in creating the field.
-	 * @param mixed  $data     The source for the value; use $type argument to specify.
+	 * @param mixed  $data     The source for the value; use $source argument to specify.
 	 * @param string $source   The type of value source; see static::get_value().
 	 * @param bool   $wrap     Default value for wrap_with_label option.
 	 *
@@ -240,9 +248,29 @@ class Form {
 
 		// Parse the passed settings with the defaults
 		$settings = wp_parse_args( $settings, $default_settings );
-
-		// Get the value to use, based on $source and data_name
-		$value = static::get_value( $data, $source, $settings['data_name'] );
+		
+		// Get the value to use, first by checking if the "get_value" callback is present
+		if ( isset( $settings['get_value'] ) && is_callable( $settings['get_value'] ) ) {
+			/**
+			 * Custom callback for getting the value to use for building the field.
+			 *
+			 * @since 1.4.2
+			 *
+			 * @param mixed  $source   The source for the value.
+			 * @param array  $settings The settings for the field.
+			 * @param string $field    The name of the field being built.
+			 * @param string $source   The type of value source.
+			 *
+			 * @return mixed The value to use for building the field.
+			 */
+			$value = call_user_func( $settings['get_value'], $data, $source, $settings, $field );
+		} elseif( isset( $settings['post_field'] ) && $settings['post_field'] && $source == 'post' ) {
+			// Alternately, if "post_field" is present (and the source is a post), get the matching field
+			$value = $data->{$settings['post_field']};
+		} else {
+			// Otherwise, use the built in get_value method
+			$value = static::get_value( $data, $source, $settings['data_name'] );
+		}
 
 		// Set a default value for the class setting;
 		// otherwise, make sure it's an array
@@ -252,9 +280,9 @@ class Form {
 			$settings['class'] = (array) $settings['class'];
 		}
 
-		// Check if the "get_values" key is present (and a callback),
-		// Apply it and replace "values" key with the returned value.
-		if ( isset ( $settings['get_values'] ) && is_callable( $settings['get_values'] ) ) {
+		// Check if the "get_values" callback is present,
+		// Run it and replace "values" key with the returned value.
+		if ( isset( $settings['get_values'] ) && is_callable( $settings['get_values'] ) ) {
 			/**
 			 * Custom callback for getting the values setting for the field.
 			 *
@@ -404,55 +432,9 @@ class Form {
 	}
 
 	/**
-	 * Build a checkbox field.
-	 *
-	 * @since 1.4.1 Added modified default value for $wrapper
-	 * @since 1.0.0
-	 *
-	 * @see Form::build_generic()
-	 */
-	public static function build_checkbox( $settings, $value, $wrapper = null ) {
-		// Default the value to 1 if it's a checkbox
-		if ( $settings['type'] == 'checkbox' && ! isset( $settings['value'] ) ) {
-			$settings['value'] = 1;
-		}
-
-		// Default the wrapper to right sided
-		if ( is_null( $wrapper ) ) {
-			$wrapper = array( 'right' );
-		}
-
-		// If the values match, mark as checked
-		if ( $value == $settings['value'] || ( is_array( $value ) && in_array( $settings['value'], $value ) ) ) {
-			$settings[] = 'checked';
-		}
-
-		// Build the <input>
-		$input = static::build_tag( 'input', $settings );
-
-		// Wrap the input in the html if needed
-		$html = static::maybe_wrap_field( $input, $settings, $wrapper );
-
-		return $html;
-	}
-
-	/**
-	 * Build a radio field.
-	 *
-	 * This uses build_checkbox rather than build_generic,
-	 * since it's not a text-style input.
-	 *
-	 * @since 1.4.0
-	 *
-	 * @see Form::build_checkbox()
-	 */
-	public static function build_radio( $settings, $value, $wrapper = null ) {
-		return static::build_checkbox( $settings, $value, $wrapper );
-	}
-
-	/**
 	 * Build a select field.
 	 *
+	 * @since 1.4.2 Added [] to field name when multiple is true
 	 * @since 1.0.0
 	 *
 	 * @see Form::build_generic()
@@ -460,8 +442,14 @@ class Form {
 	public static function build_select( $settings, $value, $wrapper = null ) {
 		$options = '';
 
+		// Ensure a values setting has been passed
 		if ( ! isset( $settings['values'] ) ) {
 			throw new Exception( 'Select fields MUST have a values parameter.' );
+		}
+		
+		// If multiple, add [] to the field name
+		if ( isset( $settings['multiple'] ) && $settings['multiple'] ) {
+			$settings['name'] .= '[]';
 		}
 
 		csv_array_ref( $settings['values'] );
@@ -491,8 +479,69 @@ class Form {
 	}
 
 	/**
+	 * Build a checkbox field.
+	 *
+	 * @since 1.4.2 Added $dummy argument and printing of dummy input for null value.
+	 * @since 1.4.1 Added modified default value for $wrapper.
+	 * @since 1.0.0
+	 *
+	 * @see Form::build_generic()
+	 *
+	 * @param bool $dummy Wether or not to print a hidden null input first.
+	 */
+	public static function build_checkbox( $settings, $value, $wrapper = null, $dummy = true ) {
+		// Default the value to 1 if it's a checkbox
+		if ( $settings['type'] == 'checkbox' && ! isset( $settings['value'] ) ) {
+			$settings['value'] = 1;
+		}
+
+		// Default the wrapper to right sided
+		if ( is_null( $wrapper ) ) {
+			$wrapper = array( 'right' );
+		}
+
+		// If the values match, mark as checked
+		if ( $value == $settings['value'] || ( is_array( $value ) && in_array( $settings['value'], $value ) ) ) {
+			$settings[] = 'checked';
+		}
+		
+		// Build the dummy <input> if enabled
+		$hidden = '';
+		if ( $dummy ) {
+			$hidden = static::build_tag( 'input', array(
+				'type' => 'hidden',
+				'name' => $settings['name'],
+				'value' => null
+			) );
+		}
+
+		// Build the actual <input>
+		$input = static::build_tag( 'input', $settings );
+
+		// Wrap the inputs in the html if needed
+		$html = static::maybe_wrap_field( $hidden . $input, $settings, $wrapper );
+
+		return $html;
+	}
+
+	/**
+	 * Build a radio field.
+	 *
+	 * This uses build_checkbox rather than build_generic,
+	 * since it's not a text-style input.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @see Form::build_checkbox()
+	 */
+	public static function build_radio( $settings, $value, $wrapper = null, $dummy = true ) {
+		return static::build_checkbox( $settings, $value, $wrapper, $dummy );
+	}
+
+	/**
 	 * Build a checklist or radio list.
 	 *
+	 * @since 1.4.2 Added dummy input for null value
 	 * @since 1.4.0 Overhauled item building and wrapper handling.
 	 * @since 1.0.0
 	 *
@@ -536,7 +585,8 @@ class Form {
 
 			$build = "build_$type";
 
-			$items .= static::$build( $item_settings, $value, array( 'right', 'li' ) );
+			// Add the input, wrapped in a list item (and sans the dummy input)
+			$items .= static::$build( $item_settings, $value, array( 'right', 'li' ), false );
 		}
 
 		$settings['class'][] = 'inputlist';
@@ -547,9 +597,16 @@ class Form {
 		if ( is_null( $wrapper ) ) {
 			$wrapper = '<div class="qs-fieldset inputlist %type %wrapper_class %id"><p class="qs-legend">%label</p> %input</div>';
 		}
+		
+		// Build a dummy <input>
+		$hidden = static::build_tag( 'input', array(
+			'type' => 'hidden',
+			'name' => $settings['name'],
+			'value' => null
+		) );
 
 		// Optionally wrap the fieldset
-		$html = static::maybe_wrap_field( $list, $settings, $wrapper );
+		$html = static::maybe_wrap_field( $hidden . $list, $settings, $wrapper );
 
 		return $html;
 	}

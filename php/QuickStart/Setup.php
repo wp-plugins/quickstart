@@ -609,6 +609,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Setup the save hook for the meta box
 	 *
+	 * @since 1.4.2 Added "post_field" update handling.
 	 * @since 1.2.0 Moved save check functionality to Tools::save_post_check().
 	 * @since 1.1.1 Fixed typo causing $args['fields'] saving to save the $_POST key, not the value.
 	 * @since 1.0.0
@@ -662,6 +663,21 @@ class Setup extends \SmartPlugin {
 					// Overide $meta_key with data_name setting if present
 					if ( isset( $settings['data_name'] ) ) {
 						$meta_key = $settings['data_name'];
+					}
+					
+					// If "post_field" is present, update the field, not a meta value
+					if ( isset( $settings['post_field'] ) && $settings['post_field'] ) {
+						global $wpdb;
+						
+						// Directly update the entry in the database
+						$wpdb->update( $wpdb->posts, array(
+							$settings['post_field'] => $_POST[ $post_key ],
+						), array(
+							'ID' => $post_id,
+						) );
+						
+						// We're done, next field
+						continue;
 					}
 				}
 
