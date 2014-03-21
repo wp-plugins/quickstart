@@ -11,15 +11,6 @@ namespace QuickStart;
 
 class Form {
 	/**
-	 * A list of accepted attributes for tag building.
-	 *
-	 * @since 1.0.0
-	 * @access public
-	 * @var array
-	 */
-	public static $accepted_attrs = array( 'accesskey', 'autocomplete', 'checked', 'class', 'cols', 'disabled', 'id', 'max', 'maxlength', 'min', 'multiple', 'name', 'placeholder', 'readonly', 'required', 'rows', 'size', 'style', 'tabindex', 'title', 'type', 'value' );
-
-	/**
 	 * Convert a field name to a valid ID
 	 *
 	 * @since 1.0.0
@@ -48,6 +39,7 @@ class Form {
 	/**
 	 * Generate the format string to use in sprintp
 	 *
+	 * @since 1.5.0 Added %id-field id.
 	 * @since 1.4.0
 	 *
 	 * @param string $side Which side the label should appear on (left/right).
@@ -56,7 +48,7 @@ class Form {
 	 * @return string The generated format string.
 	 */
 	public static function build_field_wrapper( $side = 'left', $tag = 'div' ) {
-		$format = '<' . $tag . ' class="qs-field %type %wrapper_class %id-field">';
+		$format = '<' . $tag . ' class="qs-field %type %wrapper_class" id="%id-field">';
 
 		$label = '<label for="%id" class="qs-label">%label</label>';
 		if ( $side == 'right' ) {
@@ -150,60 +142,9 @@ class Form {
 	}
 
 	/**
-	 * Build an HTML tag.
-	 *
-	 * @since 1.4.2 Updated boolean attribute handling
-	 * @since 1.0.0
-	 *
-	 * @param string $tag      The tag name.
-	 * @param array  $atts     The tag attributes.
-	 * @param string $content  The tag content.
-	 * @param string $accepted The attribute whitelist.
-	 *
-	 * @return string The html of the tag.
-	 */
-	public static function build_tag( $tag, $atts, $content = false, $accepted = null ) {
-		if ( is_null( $accepted ) ) {
-			$accepted = static::$accepted_attrs;
-		}
-
-		$html = "<$tag";
-
-		foreach ( $atts as $attr => $value ) {
-			if ( is_numeric ( $attr ) ) {
-				$html .= " $value";
-			} else {
-				// Make sure it's a registerd attribute (or data- attribute)
-				if ( ! in_array( $attr, $accepted ) && strpos( $attr, 'data-' ) !== 0 ) continue;
-				
-				// Convert boolean attribute values (except value)
-				if ( $attr != 'value' && is_bool( $value ) ) {
-					// E.g. multiple="multiple"
-					$value = $value ? $attr : '';
-				}
-
-				if ( is_array( $value ) ) {
-					// Implode into a space separated list
-					$value = implode( ' ', $value );
-				}
-				$html .= " $attr=\"$value\"";
-			}
-		}
-
-		if ( is_null( $content ) ) {
-			// Self closing tag
-			$html .= '/>';
-		} else {
-			// Add closing tag
-			$html .= ">$content</$tag>";
-		}
-
-		return $html;
-	}
-
-	/**
 	 * Build a single field, based on the passed configuration data.
 	 *
+	 * @since 1.5.0 Added "taxonomy" option handling.
 	 * @since 1.4.2 Added "get_value" and "post_field" option handling.
 	 * @since 1.4.0 Added $source argument.
 	 * @since 1.3.3 Added use of new make_label() method.
@@ -267,6 +208,18 @@ class Form {
 		} elseif( isset( $settings['post_field'] ) && $settings['post_field'] && $source == 'post' ) {
 			// Alternately, if "post_field" is present (and the source is a post), get the matching field
 			$value = $data->{$settings['post_field']};
+		} elseif( isset( $settings['taxonomy'] ) && $settings['taxonomy'] && $source == 'post' ) {
+			// Alternately, if "taxonomy" is present (and the source is a post), get the matching terms
+			
+			// Get the post_terms for $value
+			$post_terms = get_the_terms( $data->ID, $settings['taxonomy'] );
+			$value = array_map( function( $term ) {
+				return $term->term_id;
+			}, $post_terms );
+			
+			// Get the available terms for the values list
+			$tax_terms = get_terms( $settings['taxonomy'], 'hide_empty=0' );
+			$settings['values'] = simplify_object_array( $tax_terms, 'term_id', 'name' );
 		} else {
 			// Otherwise, use the built in get_value method
 			$value = static::get_value( $data, $source, $settings['data_name'] );
@@ -403,7 +356,7 @@ class Form {
 		$settings['value'] = $value;
 
 		// Build the <input>
-		$input = static::build_tag( 'input', $settings );
+		$input = Tools::build_tag( 'input', $settings );
 
 		// Add the generic class to the wrapper classes
 		$settings['wrapper_class'] .= ' generic';
@@ -423,7 +376,7 @@ class Form {
 	 */
 	public static function build_textarea( $settings, $value, $wrapper = null ) {
 		// Build the <input>
-		$input = static::build_tag( 'textarea', $settings, $value );
+		$input = Tools::build_tag( 'textarea', $settings, $value );
 
 		// Wrap the input in the html if needed
 		$html = static::maybe_wrap_field( $input, $settings, $wrapper );
@@ -434,6 +387,7 @@ class Form {
 	/**
 	 * Build a select field.
 	 *
+	 * @since 1.5.0 Add "null" option handling.
 	 * @since 1.4.2 Added [] to field name when multiple is true
 	 * @since 1.0.0
 	 *
@@ -455,6 +409,11 @@ class Form {
 		csv_array_ref( $settings['values'] );
 
 		$is_assoc = is_assoc( $settings['values'] );
+		
+		// Add a null option if requested
+		if ( isset( $settings['null'] ) ) {
+			$options .= sprintf( '<option value="">%s</option>', $settings['null'] );
+		}
 
 		// Run through the values and build the options list
 		foreach ( $settings['values'] as $val => $label ) {
@@ -471,7 +430,7 @@ class Form {
 		}
 
 		// Build the <select>
-		$input = static::build_tag( 'select', $settings, $options );
+		$input = Tools::build_tag( 'select', $settings, $options );
 
 		$html = static::maybe_wrap_field( $input, $settings, $wrapper );
 
@@ -508,7 +467,7 @@ class Form {
 		// Build the dummy <input> if enabled
 		$hidden = '';
 		if ( $dummy ) {
-			$hidden = static::build_tag( 'input', array(
+			$hidden = Tools::build_tag( 'input', array(
 				'type' => 'hidden',
 				'name' => $settings['name'],
 				'value' => null
@@ -516,7 +475,7 @@ class Form {
 		}
 
 		// Build the actual <input>
-		$input = static::build_tag( 'input', $settings );
+		$input = Tools::build_tag( 'input', $settings );
 
 		// Wrap the inputs in the html if needed
 		$html = static::maybe_wrap_field( $hidden . $input, $settings, $wrapper );
@@ -541,6 +500,7 @@ class Form {
 	/**
 	 * Build a checklist or radio list.
 	 *
+	 * @since 1.5.0 Added %id-fieldset id.
 	 * @since 1.4.2 Added dummy input for null value
 	 * @since 1.4.0 Overhauled item building and wrapper handling.
 	 * @since 1.0.0
@@ -592,14 +552,14 @@ class Form {
 		$settings['class'][] = 'inputlist';
 
 		// Build the list
-		$list = static::build_tag( 'ul', $settings, $items, array( 'class', 'id', 'style', 'title' ) );
+		$list = Tools::build_tag( 'ul', $settings, $items, array( 'class', 'id', 'style', 'title' ) );
 
 		if ( is_null( $wrapper ) ) {
-			$wrapper = '<div class="qs-fieldset inputlist %type %wrapper_class %id"><p class="qs-legend">%label</p> %input</div>';
+			$wrapper = '<div class="qs-fieldset inputlist %type %wrapper_class" id="%id-fieldset"><p class="qs-legend">%label</p> %input</div>';
 		}
 		
 		// Build a dummy <input>
-		$hidden = static::build_tag( 'input', array(
+		$hidden = Tools::build_tag( 'input', array(
 			'type' => 'hidden',
 			'name' => $settings['name'],
 			'value' => null
@@ -665,7 +625,7 @@ class Form {
 			}
 
 			// Add the input field for this item
-			$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-input">', $name, $id );
+			$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $name, $id );
 		$html .= '</div>';
 		return $html;
 	}
@@ -673,7 +633,7 @@ class Form {
 	/**
 	 * Build a file adder field.
 	 *
-	 * @since 1.4.0 Overhauled markup/functionality
+	 * @since 1.4.0 Overhauled markup/functionality.
 	 * @since 1.3.3
 	 *
 	 * @see Form::build_generic()
@@ -703,9 +663,6 @@ class Form {
 
 			// A button to clear all items currently loaded
 			$html .= ' <button type="button" class="button qs-clear">Clear</button>';
-
-			// Print an empty input, to allow the saving of nothing
-			$html .= sprintf( '<input type="hidden" name="%s" value="">', $name );
 
 			// Start the preview list container
 			$html .= '<div class="qs-container">';
@@ -773,6 +730,102 @@ class Form {
 			}
 			$html .= '</div>';
 			$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $settings['name'], $value );
+		$html .= '</div>';
+
+		return $html;
+	}
+	
+	/**
+	 * Build a single repeater item.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @see Form::build_generic()
+	 */
+	private static function build_repeater_item( $repeater, $item = null, $i = -1 ) {
+		$fields = csv_array( $repeater['template'] );
+
+		$html = '<div class="qs-item">';
+			if ( is_callable( $fields ) ) {
+				/**
+				 * Custom callback for building a repeater item.
+				 *
+				 * @since 1.5.0
+				 *
+				 * @param mixed  $item The data for this item.
+				 * @param int    $i The index of this item.
+				 * @param string $name The name of this repeater's field.
+				 * @param array  $settings The settings for this repeater.
+				 *
+				 * @return string The HTML of the repeater item.
+				 */
+				$html .= call_user_func( $fields, $item, $i );
+			} elseif ( is_array( $fields ) ) {
+				// Loop through each field in the template, and build them
+				foreach ( $fields as $field => $settings ) {
+					make_associative( $field, $settings );
+					
+					// Create the name for the field
+					$settings['name'] = sprintf( '%s[%d][%s]', $repeater['name'], $i, $field );
+					
+					// Create the ID for the field
+					$settings['id'] = static::make_id( $field ) . '-';
+					
+					// Add a unique string to the end of the ID or a % placeholder for the blank
+					$settings['id'] .= $i == -1 ? '%' : substr( md5( $field.$i ), 0, 6 );
+					
+					// Set the value for the field
+					if ( is_null( $item ) || ! isset( $item[ $field ] ) ) {
+						$value = '';
+					} else {
+						$value = $item[ $field ];
+					}
+					
+					// Finally, build the field
+					$html .= static::build_field( $field, $settings, $value );
+				}
+			}
+			$html .= '<button type="button" class="button qs-delete">Delete</button>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * Build a repeater interface.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @see Form::build_generic()
+	 */
+	public static function build_repeater( $settings, $data ) {
+		if ( ! isset( $settings['template'] ) ) {
+			throw new Exception( 'Repeater fields MUST have a template parameter.' );
+		}
+
+		// Get the value to use, based on $source and the data_name
+		$values = static::get_value( $data, $source, $field );
+
+		// Write the repeater container
+		$html = sprintf( '<div class="qs-repeater" id="%s-repeater">', $settings['name'] );
+			// Write the add item button
+			$html .= '<button type="button" class="button qs-add">Add Item</button>';
+
+			// Write the repeater item template
+			$html .= '<template class="qs-template">';
+				$html .= static::build_repeater_item( $settings );
+			$html .= '</template>';
+
+			
+			// Write the existing items if present
+			$html .= '<div class="qs-container">';
+			if ( $values ) {
+				// Loop through each entry in the data, write the items
+				foreach ( $values as $i => $item ) {
+					$html .= static::build_repeater_item( $settings, $item, $i );
+				}
+			}
+			$html .= '</div>';
 		$html .= '</div>';
 
 		return $html;

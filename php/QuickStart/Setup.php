@@ -136,7 +136,7 @@ class Setup extends \SmartPlugin {
 		if ( is_admin() && ( ! defined( 'QS_HELPERS_ENQUEUED' ) || ! QS_HELPERS_ENQUEUED ) ) {
 			Hooks::backend_enqueue( array(
 				'css' => array(
-					'qs-helpers-css' => array( plugins_url('/css/QS.helpers.css', QS_FILE ) ),
+					'qs-helpers-css' => array( plugins_url( '/css/QS.helpers.css', QS_FILE ) ),
 				),
 				'js' => array(
 					'qs-helpers-js' => array( plugins_url( '/js/QS.helpers.js', QS_FILE ), array( 'jquery' ) ),
@@ -436,6 +436,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Register the requested taxonomy.
 	 *
+	 * @since 1.5.0 Added "static" option handling (custom taxonomy metabox)
 	 * @since 1.3.1 Removed Hooks::taxonomy_count call.
 	 * @since 1.0.0
 	 *
@@ -475,6 +476,25 @@ class Setup extends \SmartPlugin {
 
 		// Parse the arguments with the defaults
 		$args = wp_parse_args($args, $defaults);
+		
+		// Check for the "static" option, set it up
+		$static = false;
+		if ( isset( $args['static'] ) && $args['static'] ) {
+			$static = true;
+			
+			// Disable the default metabox
+			$args['meta_box_cb'] = false;
+			
+			$multiple = false;
+			// Default the "multiple" flag to false
+			if ( isset( $args['multiple'] ) ) {
+				$multiple = $args['multiple'];
+				unset( $args['multiple'] );
+			}
+			
+			// Remove the static argument before saving
+			unset( $args['static'] );
+		}
 
 		// Now, register the post type
 		register_taxonomy( $taxonomy, $args['post_type'], $args );
@@ -494,6 +514,13 @@ class Setup extends \SmartPlugin {
 					$term = $args;
 					$args = array();
 				}
+				
+				// If $args is not an array, assume slug => name format
+				if ( ! is_array( $args ) ) {
+					$slug = $term;
+					$term = $args;
+					$args = array( 'slug' => $slug );
+				}
 
 				// Check if it exists, skip if so
 				if ( get_term_by( 'name', $term, $taxonomy ) ) {
@@ -503,6 +530,21 @@ class Setup extends \SmartPlugin {
 				// Insert the term
 				wp_insert_term( $term, $taxonomy, $args );
 			}
+		}
+		
+		// Finish setting up the static taxonomy metabox if needed
+		if ( $static ) {
+			$this->register_meta_box( "$taxonomy-terms", array(
+				'title' => $taxonomy_obj->labels->name,
+				'post_type' => $taxonomy_obj->object_type,
+				'context' => 'side',
+				'priority' => 'core',
+				'name' => $taxonomy,
+				'type' => $multiple ? 'checklist' : 'select',
+				'class' => 'widefat static-terms',
+				'null' => '&mdash; None &mdash;',
+				'taxonomy' => $taxonomy,
+			) );
 		}
 
 		// Now that it's registered, fetch the resulting show_ui argument,
@@ -609,6 +651,7 @@ class Setup extends \SmartPlugin {
 	/**
 	 * Setup the save hook for the meta box
 	 *
+	 * @since 1.5.0 Added taxonomy metabox saving.
 	 * @since 1.4.2 Added "post_field" update handling.
 	 * @since 1.2.0 Moved save check functionality to Tools::save_post_check().
 	 * @since 1.1.1 Fixed typo causing $args['fields'] saving to save the $_POST key, not the value.
@@ -679,7 +722,29 @@ class Setup extends \SmartPlugin {
 						// We're done, next field
 						continue;
 					}
+					
+					// If "taxonomy" is present, update the terms, not a meta value
+					if ( isset( $settings['taxonomy'] ) && $settings['taxonomy'] ) {
+						// Default the terms to null
+						$terms = null;
+						
+						if ( ! empty( $_POST[ $post_key ] ) ) {
+							// Get the terms, ensure it's an array
+							$terms = (array) $_POST[ $post_key ];
+						
+							// Ensure the values are integers
+							$terms = array_map( 'intval', $terms );
+						}
+						
+						// Update the terms
+						wp_set_object_terms( $post_id, $terms, $settings['taxonomy'] );
+						
+						// We're done, next field
+						continue;
+					}
 				}
+				
+				$value = isset( $_POST[ $post_key ] ) ? $_POST[ $post_key ] : null;
 
 				update_post_meta( $post_id, $meta_key, $_POST[ $post_key ] );
 			}
@@ -782,7 +847,7 @@ class Setup extends \SmartPlugin {
 		// Enqueue the necessary scripts
 		Hooks::backend_enqueue( array(
 			'css' => array(
-				'qs-order-css' => array( plugins_url('/css/QS.order.css', QS_FILE ) ),
+				'qs-order-css' => array( plugins_url( '/css/QS.order.css', QS_FILE ) ),
 			),
 			'js' => array(
 				'jquery-ui-nested-sortable' => array( plugins_url( '/js/jquery.ui.nestedSortable.js', QS_FILE ), array( 'jquery-ui-sortable' ) ),
@@ -1014,7 +1079,7 @@ class Setup extends \SmartPlugin {
 				}
 
 				// Add the button to the appropriate row
-				$method = 'add_mce_buttons' . ( $row > 1 ? "_$row" : '');
+				$method = 'add_mce_buttons' . ( $row > 1 ? "_$row" : '' );
 				$this->$method( $button );
 			}
 
@@ -1266,7 +1331,7 @@ class Setup extends \SmartPlugin {
 	public function _register_page_settings( $page, $args ) {
 		// Run through any bare fields (assume belonging to default, which will be added automatically)
 		if ( isset( $args['fields'] ) ) {
-			add_settings_section('default', null, null, $page);
+			add_settings_section( 'default', null, null, $page );
 			$this->_register_settings( $args['fields'], 'default', $page );
 		}
 
