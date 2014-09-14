@@ -1,3 +1,6 @@
+/* global QS */
+window.QS = window.QS || {};
+
 jQuery(function( $ ) {
 	// Create the sortable options
 	var sortableOptions = {
@@ -10,14 +13,13 @@ jQuery(function( $ ) {
 		placeholder:      'qs-placeholder',
 		revert:           true,
 		tolerance:        'pointer',
-		toleranceElement: '> div',
+		toleranceElement: '> div'
 	};
 
 	// Create the nestedSortable options
 	// a copy of the sortable options + an update event for the parent value
 	var nestedSortableOptions = $.extend( {}, sortableOptions, {
 		update: function( event, ui ) {
-			console.log(event);
 			var parent = ui.item.parent();
 			if ( parent.prev( '.inner' ).length > 0 ) {
 				parent = parent.prev( '.inner' ).find( '.qs-order-id' ).val();
@@ -41,4 +43,13 @@ jQuery(function( $ ) {
 		.filter( '.qs-nested' )
 		.children( 'ol' )
 		.nestedSortable( nestedSortableOptions );
+
+	// Quick Sort buttons
+	$( '.qs-order-manager' ).on( 'click', '.qs-sort button', function() {
+		var method = $( this ).val();
+
+		if ( method ) {
+			QS.helpers.sortItems( '.qs-order-manager > ol', 'li', method );
+		}
+	});
 });

@@ -1,3 +1,4 @@
+/* global _, wp, QS */
 window.QS = window.QS || {};
 
 (function( $ ) {
@@ -10,7 +11,7 @@ window.QS = window.QS || {};
 	 */
 
 	/**
-	 * Convert string to Title Case
+	 * Convert string to Title Case.
 	 *
 	 * @since 1.4.0
 	 *
@@ -22,9 +23,9 @@ window.QS = window.QS || {};
 	    	return $1.toUpperCase();
 	    });
 	}
-	
+
 	/**
-	 * Runs selected queries and creates new entries for those elements
+	 * Runs selected queries and creates new entries for those elements.
 	 *
 	 * @since 1.4.0
 	 *
@@ -77,20 +78,21 @@ window.QS = window.QS || {};
 		 * @return array An array of attachments.
 		 */
 		attachments: function( frame ) {
-			if ( undefined === frame )
+			if ( undefined === frame ) {
 				frame = this.frame;
+			}
 
 			var attachments = [];
 
 			var collection;
 
-			if ( frame.options.state == 'gallery-edit' ) {
+			if ( 'gallery-edit' === frame.options.state ) {
 				collection = frame.states.get( 'gallery-edit' ).get( 'library' );
 			} else {
 				collection = frame.state().get( 'selection' );
 			}
 
-			collection.map(function( item, i, items ) {
+			collection.map(function( item ) {
 				attachments.push( item.attributes );
 			});
 
@@ -113,18 +115,18 @@ window.QS = window.QS || {};
 
 			//Run through each event and setup the handlers
 			if ( options.events !== undefined ) {
-				for ( var e in options.events ) {
+				_.each( options.events, function( event, e ) {
 					//Bind the callback to the event, passing QS.media as the context
 					//from that they'll be able to access the frame and trigger element
-					frame.on( e, options.events[ e ], media );
-				}
+					frame.on( e, event, media );
+				});
 			}
 
 			// In case they need to hook into it, trigger "init" on the frame,
 			// passing the frame itself as an additional parameter, since it
 			// can't be linked into QS.media yet
 			frame.trigger( 'init', frame );
-			
+
 			// If not setting up the trigger, just return the initialized frame.
 			if ( notrigger ) {
 				return frame;
@@ -147,12 +149,12 @@ window.QS = window.QS || {};
 					// Link the frame into QS.media
 					media.frame = frame;
 					// Link the trigger into QS.media
-					media.trigger = $(this);
+					media.trigger = $( this );
 
 					frame.open();
 				});
 			}
-			
+
 			return frame;
 		},
 
@@ -170,26 +172,24 @@ window.QS = window.QS || {};
 			}
 
 			if ( ids !== undefined ) {
-				var selection = frame.state().get('selection');
+				var selection = frame.state().get( 'selection' );
 				var attachment;
 
 				selection.reset( [] );
 
-				if ( 'string' == typeof ids ) {
+				if ( typeof ids === 'string' ) {
 					ids = ids.split( ',' );
 				}
 
 				var id;
-				for ( var i in ids ) {
-					id = ids[ i ];
-
+				_.each( ids, function( id ) {
 					attachment = wp.media.attachment( id );
 					attachment.fetch();
 
 					selection.add( attachment ? [ attachment ] : [] );
-				}
+				} );
 			}
-		},
+		}
 	});
 
 	/**
@@ -257,7 +257,7 @@ window.QS = window.QS || {};
 
 			if ( options.gallery !== undefined ) {
 				// If gallery was not a comma separated string, make it one
-				if ( typeof options.gallery != 'string' ) {
+				if ( typeof options.gallery !== 'string' ) {
 					options.gallery = options.gallery.join( ',' );
 				}
 
@@ -276,7 +276,7 @@ window.QS = window.QS || {};
 
 				// Fetch the query's attachments, and then break ties from the query to allow for sorting.
 				selection.more().done(function() {
-					selection.props.set( { query: false });
+					selection.props.set({ query: false });
 					selection.unmirror();
 					selection.props.unset( 'orderby' );
 				});
@@ -298,53 +298,58 @@ window.QS = window.QS || {};
 	 * jQuery Plugins
 	 * =========================
 	 */
-	
+
 	/**
-	 * Setup file adder functionality
+	 * Setup file adder functionality.
 	 *
-	 * @since 1.5.0 Overhauled for live-plugin purposes
+	 * @since 1.6.0 Moved sortable handling, added thubmnail check, show option, and initonly mode.
+	 * @since 1.5.0 Overhauled for live-plugin purposes.
 	 * @since 1.2.0
 	 *
 	 * @param Event event The click event that triggered this.
+	 * @param string mode  Pass 'initonly' to setup but not open the frame.
 	 */
-	QS.addFile = function( event ) {
+	QS.addFile = function( event, mode ) {
 		var $elm = $( this );
-		
+
 		// If this is a button, update $elm to the parent qs-field
 		if ( $elm.hasClass('qs-button') ) {
 			$elm = $elm.parents('.qs-addfile');
 		}
-		
+
 		// Load the stored addFile configurations
 		var plugin = $elm.data('QS.addFile');
-		
+
 		// Extract the passed options
 		var options = event.data;
-		
+
 		// Check if plugin data already exists, setup if not
 		if ( ! plugin ) {
 			// Check for multiple mode
-			var multi = $elm.hasClass( 'multiple' );
-			
+			var is_multi = $elm.hasClass( 'multiple' );
+
 			// Get media type
 			var type = $elm.data( 'type' );
-			
+
+			// Get what display for the file
+			var show = $elm.data( 'show' );
+
 			// Title and choose button text
 			var title = 'Select ' + ucwords( type );
 			var choose = 'Use Selected ' + ucwords( type );
 
 			// Add " file" to text bits for non images
-			if ( type != 'image' ) {
+			if ( type !== 'image' ) {
 				title += ' File';
 				choose += ' File';
 			}
 
 			// Pluralize text bits if needed
-			if ( multi ) {
+			if ( is_multi ) {
 				title += 's';
 				choose += 's';
 			}
-			
+
 			var defaults = {
 				// Component selectors
 				trigger:    '.qs-button',
@@ -352,15 +357,15 @@ window.QS = window.QS || {};
 				template:   '.qs-template',
 				preview:    '.qs-preview',
 				input:      '.qs-value',
-				
+
 				// GUI Text
 				title:      title,
 				choose:     choose,
-				
+
 				// Functionality Options
-				multiple:   multi,
-				media: 		type,
-				
+				multiple:   is_multi,
+				media:		type,
+
 				// Events
 				events:     {
 					select: function() {
@@ -371,100 +376,113 @@ window.QS = window.QS || {};
 						var attachment, item, preview, input;
 
 						// Empty the container if not in multiple mode
-						if ( ! multi ) {
+						if ( ! is_multi ) {
 							plugin.$container.empty();
 						}
 
 						// Loop through all attachments found
-						for ( var i in attachments ) {
-							// Get the current attachment
-							attachment = attachments[ i ];
+						_.each( attachments, function( attachment, i ) {
+							// If not multiple and this isn't the first item, skip
+							if ( ! is_multi && 0 === i ) {
+								return;
+							}
 
 							// Make a copty of the template item
 							item = plugin.$template.clone();
+
+							console.log(i);
 
 							// Get the preview and input elements
 							preview = item.find( plugin.preview );
 							input = item.find( plugin.input );
 
 							// Update preview accordingly
-							if ( preview.is( 'img' ) && attachment.type == 'image' ) {
+							if ( preview.is( 'img' ) && 'image' === attachment.type ) {
 								// Preview is an image, update the source
-								preview.attr( 'src', attachment.sizes.thumbnail.url );
+								// Preview is an image, update the source
+								if ( null === attachment.sizes.thumbnail ) {
+									preview.attr( 'src', attachment.sizes.thumbnail.url );
+								} else {
+									preview.attr( 'src', attachment.sizes.full.url );
+								}
 							} else {
-								// Preview should be a span, update the content
-								preview.html( attachment.url.replace( /.+?([^\/]+)$/, '$1' ) );
+								// Preview should be plain text of the title or filename, update the content
+								if ( 'title' === show ) {
+									preview.html( attachment.title );
+								} else {
+									preview.html( attachment.url.replace( /.+?([^\/]+)$/, '$1' ) );
+								}
 							}
+
+							// Add data attributes for quick sort support
+							item.data( 'name', attachment.filename.replace( /[^\w\-]+/g, '-' ).toLowerCase() );
+							item.data( 'date', attachment.date.getTime() / 1000 );
 
 							// Store the ID in the input field
 							input.val( attachment.id );
 
 							// Add the item to the container
 							plugin.$container.append( item );
-
-							// No multiple = stop after the first one
-							if ( ! multi ) break;
-						}
+						});
 					}
 				}
 			};
-			
+
 			// Get the data- attribute values that are allowed
 			var attributes = _.pick( $elm.data(), 'title', 'choose', 'trigger', 'container', 'template', 'preview', 'input' );
-			
+
 			// Merge options with the matching data- attribute values
 			plugin = _.extend( {}, defaults, options, attributes );
-			
+
 			// Query the trigger, container, and template elements if not present
 			autoQuery( $elm, plugin, [ 'trigger', 'container', 'template' ] );
 
 			// Create the template object
 			plugin.$template = $( plugin.$template.html() );
-			
+
 			// Setup the insert hook and get the frame
 			plugin.frame = media.insert( plugin, true );
 
-			// Setup sortability if multiple
-			if ( multi ) {
-				plugin.$container.sortable( {
-					items: '.qs-item',
-					axis: type == 'image' ? false : 'y', // If images, allow sideways sorting
-				} );
-			}
-			
 			// Store the plugin options for later use
 			$elm.data( 'QS.addFile', plugin );
 		}
-		
+
 		// Set this frame as the current frame
 		media.frame = plugin.frame;
-		
+
+		// End now if initializing only
+		if ( 'initonly' === mode ) {
+			return;
+		}
+
 		// Now, open the frame
 		plugin.frame.open();
 	};
-	
+
 	/**
-	 * Setup gallery editor functionality
+	 * Setup gallery editor functionality.
 	 *
-	 * @since 1.5.0 Overhauled for live-plugin purposes
+	 * @since 1.6.0 Preloading of gallery items, initonly mode.
+	 * @since 1.5.0 Overhauled for live-plugin purposes.
 	 * @since 1.0.0
 	 *
 	 * @param Event event The click event that triggered this.
+	 * @param string mode  Pass 'initonly' to setup but not open the frame.
 	 */
-	QS.editGallery = function( options ) {
+	QS.editGallery = function( event, mode ) {
 		var $elm = $( this );
-		
+
 		// If this is a button, update $elm to the parent qs-field
-		if ( $elm.hasClass('qs-button') ) {
-			$elm = $elm.parents('.qs-editgallery');
+		if ( $elm.hasClass( 'qs-button' ) ) {
+			$elm = $elm.parents('.qs-editgallery' );
 		}
-		
+
 		// Load the stored editGallery configurations
-		var plugin = $elm.data('QS.editGallery');
-		
+		var plugin = $elm.data( 'QS.editGallery' );
+
 		// Extract the passed options
 		var options = event.data;
-		
+
 		// Check if plugin data already exists, setup if not
 		if ( ! plugin || ! plugin.frame ) {
 			var defaults = {
@@ -472,16 +490,16 @@ window.QS = window.QS || {};
 				trigger:    '.qs-button',
 				preview:    '.qs-preview',
 				input:      '.qs-value',
-				
+
 				// GUI Text
 				title:      $elm.text(),
-				
+
 				// Events
 				events:     {
 					update: function() {
 						// Get the attachments
 						var attachments = media.attachments();
-						
+
 						// Loop vars
 						var items = [], img;
 
@@ -489,70 +507,80 @@ window.QS = window.QS || {};
 						plugin.$preview.empty();
 
 						// Go through each attachment
-						for ( var i in attachments ) {
+						_.each( attachments, function( attachment ) {
 							// Add the id to the items list
-							items.push( attachments[ i ].id );
-							
+							items.push( attachment.id );
+
 							// Create a new image with the thumbnail URL
-							img = $( '<img src="' + attachments[ i ].sizes.thumbnail.url + '">' );
-							
+							img = $( '<img src="' + attachment.sizes.thumbnail.url + '">' );
+
 							// Add the new image to the preview
 							plugin.$preview.append( img );
-						}
+						});
 
 						// Update the input with the id list
 						plugin.$input.val( items.join( ',' ) );
 					}
 				}
 			};
-			
+
 			// Get the data- attribute values that are allowed
 			var attributes = _.pick( $elm.data(), 'title', 'trigger', 'preview', 'input' );
-			
+
 			// Merge options with the matching data- attribute values
 			plugin = _.extend( {}, defaults, options, attributes );
-			
+
 			// Query the trigger, container, and template elements if not present
 			autoQuery( $elm, plugin, [ 'trigger', 'preview', 'input' ] );
-			
+
+			// If no gallery is defined, use the input's value
+			if ( plugin.gallery === undefined ) {
+				plugin.gallery = plugin.$input.val();
+			}
+
 			// Setup the insert hook and get the frame
 			plugin.frame = media.gallery( plugin, true );
-			
+
 			// Store the plugin options for later use
 			$elm.data( 'QS.editGallery', plugin );
 		}
-		
+
 		// Set this frame as the current frame
 		media.frame = plugin.frame;
-		
+
+		// End now if initializing only
+		if ( 'initonly' === mode ) {
+			return;
+		}
+
 		// Now, open the frame
 		plugin.frame.open();
 	};
-	
-	
+
+
 	/**
-	 * Setup image setter functionality
+	 * Setup image setter functionality.
 	 *
-	 * @since 1.5.0 Modified to reflect live-plugin approach
-	 * @since 1.4.0 Converted to addFile alias
+	 * @since 1.5.0 Modified to reflect live-plugin approach.
+	 * @since 1.4.0 Converted to addFile alias.
 	 * @since 1.0.0
 	 *
 	 * @param Event event The click event that triggered this.
 	 */
 	QS.setImage = function( event ) {
 		var $elm = $( this );
-		
+
 		// Ensure the type is set to image
 		$elm.data( 'type', 'image' );
-		
+
 		// Alias to the addFile method
 		return QS.addFile.call( this, event );
 	};
 
 	/**
-	 * Setup a QS plugin for an element
+	 * Setup a QS plugin for an element.
 	 *
-	 * @since 1.5.0 Overhauled for live-plugin purposes
+	 * @since 1.5.0 Overhauled for live-plugin purposes.
 	 * @since 1.0.0
 	 *
 	 * @param string selector Optional. The selector to delegate the click event to.
@@ -560,8 +588,9 @@ window.QS = window.QS || {};
 	 * @param object options  Optional. The custom options to pass to the plugin.
 	 */
 	jQuery.fn.QS = function( /* [selector,] plugin [, options] */ ) {
-		var selector, plugin, options;
-		
+		var $elm = $( this ),
+			selector, plugin, options;
+
 		// Proceed based on number of arguments
 		switch ( arguments.length ) {
 			case 3: // ( selector, plugin, options )
@@ -580,22 +609,26 @@ window.QS = window.QS || {};
 					options  = arguments[2];
 				}
 				break;
-			case 1:
-				// ( plugin )
+			case 1: // ( plugin )
 				plugin = arguments[0];
 				break;
 			default:
 				return;
 		}
-		
+
 		var callback = QS[ plugin ];
-	
+
 		// Setup the (delegated) click event
 		if ( selector ) {
-			return $( this ).on( 'click', selector, options, callback );
+			$elm.on( 'click', selector, options, callback );
 		} else {
-			return $( this ).on( 'click', options, callback );
+			$elm.on( 'click', options, callback );
 		}
+
+		// Immediately initialize existing elements
+		$elm.find( selector ).trigger( 'click', [ 'initonly' ] );
+
+		return $elm;
 	};
 
 	// Clean up. Prevents mobile browsers caching

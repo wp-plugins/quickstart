@@ -63,6 +63,7 @@ function is_assoc( $array ) {
  * Check if the $key is an associative key (non numeric),
  * Swap with $value and make new value empty array if so.
  *
+ * @since 1.6.0 Only if $value is string, and return true/false if key is string.
  * @since 1.0.0
  *
  * @param mixed &$key   The key being tested.
@@ -70,10 +71,11 @@ function is_assoc( $array ) {
  * @param mixed $fill   The new value for $value.
  */
 function make_associative( &$key, &$value, $fill = array() ) {
-	if ( is_int( $key ) ) {
+	if ( is_int( $key ) && is_string( $value ) ) {
 		$key = $value;
 		$value = $fill;
 	}
+	return is_string( $key );
 }
 
 /**
@@ -92,7 +94,8 @@ function make_legible( $string ) {
 /**
  * Restructure an array into a more logical layout.
  *
- * Best exable is the $_FILES array when you have multiple file fields with an array name
+ * Best exable is the $_FILES array when you have multiple file fields with an array name.
+ *
  * <input type="file" name="import[something]">
  * This would restructure $_FILES so instead of $_FILES['import']['name']['something'],
  * we get $_FILES['import']['something']['name']
@@ -168,9 +171,11 @@ function _process_n_form( $string, $rules ) {
 /**
  * Convert a string to plural form... or at least try to.
  *
+ * @since 1.6.0 Fixed missing e on ch/x/s-es
  * @since 1.0.0
  *
  * @param string $string The string that is to be converted to plural form.
+ *
  * @return string The input string ( hopefully ) converted to plural form.
  */
 function pluralize( $string ) {
@@ -179,9 +184,9 @@ function pluralize( $string ) {
  		array( '/erson$/', 'eople' ), // person => people
  		array( '/man$/', 'men' ), // woman => women
 		array( '/(fe?)$/i', '$1ves' ), // half => halves, knife > knives
-		array( '/([^aeiou])y$/', '$1ies' ),  // baby => babies
-		array( '/(ch|x|s)$/', '$1s' ), // batch => batches, box => boxes, bus => buses
-		array( '/$/', 's' ) // thing => things
+		array( '/([^aeiou])y$/', '$1ies' ), // baby => babies
+		array( '/(ch|x|s)$/', '$1es' ), // batch => batches, box => boxes, bus => buses
+		array( '/$/', 's' ), // thing => things
 	);
 
 	return _process_n_form( $string, $plurals );
@@ -193,6 +198,7 @@ function pluralize( $string ) {
  * @since 1.0.0
  *
  * @param string $string The string that is to be converted to singular form.
+ *
  * @return string The input string ( hopefully ) converted to singular form.
  */
 function singularize( $string ) {
@@ -204,7 +210,7 @@ function singularize( $string ) {
 		array( '/ves$/i', 'f' ), // halves => half
 		array( '/([^aeiou])ies$/', '$1y' ), // babies => baby
 		array( '/(ch|x|s)es$/', '$1' ), // batches => batch, boxes => box, buses => bus
- 		array( '/s$/i', '' ) // things => thing
+ 		array( '/s$/i', '' ), // things => thing
 	);
 
 	return _process_n_form( $string, $singulars );
@@ -213,45 +219,37 @@ function singularize( $string ) {
 /**
  * Given an array, extract the disired value defined like so: myvar[mykey][0].
  *
+ * @since 1.6.0 Overhauled and simplified.
  * @since 1.0.0
  *
- * @param array  $array The array to extract from.
- * @param string $map   The array map representation to work from.
+ * @param array        $array The array to extract from.
+ * @param array|string $map   The map to follow, in myvar[mykey] or [myvar, mykey] form.
  *
  * @return mixed The extracted value.
  */
 function extract_value( $array, $map ) {
+	// Abort if not an array
 	if ( ! is_array( $array ) ) return $array;
 
-	// Break $map into the starting key and the subsequent map
-	preg_match( '/^(.+?)(\[.+\])?$/', $map, $matches );
-	$key = $matches[1];
-	$map = $matches[2];
-	$array = $array[ $key ];
+	// If $map is a string, turn it into an array
+	if ( ! is_array( $map ) ) {
+		$map = trim( $map, ']' ); // Get rid of last ] so we don't have an empty value at the end
+		$map = preg_split( '/[\[\]]+/', $map );
+	}
 
-	if ( ! is_array( $array ) ) {
-		// Resulting $array not an array, return as the value
-		return $array;
-	} elseif ( preg_match_all( '/\[(.+?)\]/', $map, $matches ) ) {
-		// Keys can be extracted from the map, loop through them
-		$value = $array;
-		foreach ( $matches[1] as $key ) {
-			// Check if  the current $value has that key
-			if ( is_array( $value ) && isset( $value[ $key ] ) ) {
-				// Reassign that value to $value
-				$value = $value[ $key ];
-			} else {
-				// No dice, return null
-				return null;
-			}
+	// Extract the first key to look for
+	$key = array_shift( $map );
+
+	// See if it exists
+	if ( isset( $array[ $key ] ) ) {
+		// See if we need to go deeper
+		if ( $map ) {
+			return extract_value( $array[ $key ], $map );
+		} else {
+			return $array[ $key ];
 		}
-		// Done!  return the extracted value
-		return $value;
-	} elseif ( isset( $array[ $map ] ) ) {
-		// Map isn't an actual map, but actual key of the array, return the value
-		return $array[ $map ];
 	} else {
-		// Otherwise, return null
+		// Nothing found.
 		return null;
 	}
 }

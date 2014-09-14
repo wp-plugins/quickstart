@@ -13,7 +13,7 @@ class Tools {
 	/**
 	 * A list of accepted attributes for tag building.
 	 *
-	 * @since 1.5.0 Moved from Form to Tools class
+	 * @since 1.5.0 Moved from Form to Tools class.
 	 * @since 1.0.0
 	 *
 	 * @access public
@@ -22,16 +22,27 @@ class Tools {
 	public static $accepted_attrs = array( 'accesskey', 'autocomplete', 'checked', 'class', 'cols', 'disabled', 'id', 'max', 'maxlength', 'min', 'multiple', 'name', 'placeholder', 'readonly', 'required', 'rows', 'size', 'style', 'tabindex', 'title', 'type', 'value' );
 
 	/**
+	 * A list of tags that should have no content.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @access public
+	 * @var array
+	 */
+	public static $void_elements = array( 'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'keygen', 'link', 'menuitem', 'meta', 'param', 'source', 'track', 'wbr' );
+
+	/**
 	 * Build an HTML tag.
 	 *
-	 * @since 1.5.0 Moved from Form to Tools class
-	 * @since 1.4.2 Updated boolean attribute handling
+	 * @since 1.6.0 Revised handling of boolean attributes, added $void_elements.
+	 * @since 1.5.0 Moved from Form to Tools class.
+	 * @since 1.4.2 Updated boolean attribute handling.
 	 * @since 1.0.0
 	 *
 	 * @param string $tag      The tag name.
 	 * @param array  $atts     The tag attributes.
-	 * @param string $content  The tag content.
-	 * @param string $accepted The attribute whitelist.
+	 * @param string $content  Optional The tag content.
+	 * @param string $accepted Optional The attribute whitelist.
 	 *
 	 * @return string The html of the tag.
 	 */
@@ -44,16 +55,14 @@ class Tools {
 
 		foreach ( $atts as $attr => $value ) {
 			if ( is_numeric ( $attr ) ) {
+				// Boolean attributes; method 1
 				$html .= " $value";
+			} else if ( in_array( $attr, $accepted ) && $attr != 'value' && is_bool( $value ) ) {
+				// Boolean attributes, method 2
+				$html .= $value ? " $attr" : '';
 			} else {
 				// Make sure it's a registerd attribute (or data- attribute)
 				if ( ! in_array( $attr, $accepted ) && strpos( $attr, 'data-' ) !== 0 ) continue;
-				
-				// Convert boolean attribute values (except value)
-				if ( $attr != 'value' && is_bool( $value ) ) {
-					// E.g. multiple="multiple"
-					$value = $value ? $attr : '';
-				}
 
 				if ( is_array( $value ) ) {
 					// Implode into a space separated list
@@ -63,11 +72,12 @@ class Tools {
 			}
 		}
 
-		if ( is_null( $content ) ) {
+		// Handle closing of the tag
+		if ( in_array( $tag, static::$void_elements ) ) {
 			// Self closing tag
 			$html .= '/>';
 		} else {
-			// Add closing tag
+			// Add content and closing tag
 			$html .= ">$content</$tag>";
 		}
 
@@ -77,7 +87,7 @@ class Tools {
 	/**
 	 * Load the requested helper files.
 	 *
-	 * @param mixed $helpers A name or array of helper files to load (sans extention)
+	 * @param mixed $helpers A name or array of helper files to load (sans extention).
 	 */
 	public static function load_helpers( $helpers ) {
 		csv_array_ref( $helpers );
@@ -92,13 +102,14 @@ class Tools {
 	/**
 	 * Actually build a meta_box, either calling the callback or running the build_fields Form method.
 	 *
+	 * @since 1.6.0 Added use of get_fields option.
 	 * @since 1.4.0 Added use of $source parameter in Form::build_fields().
 	 * @since 1.3.0 Added option of callback key instead of fields for a callback.
 	 * @since 1.0.0
 	 * @uses Form::build_fields()
 	 *
-	 * @param object $post The post object to be sent when called via add_meta_box
-	 * @param array $args The callback args to be sent when called via add_meta_box
+	 * @param object $post The post object to be sent when called via add_meta_box.
+	 * @param array $args The callback args to be sent when called via add_meta_box.
 	 */
 	public static function build_meta_box( $post, $args ) {
 		// Extract $args
@@ -107,7 +118,7 @@ class Tools {
 
 		// Print nonce field
 		wp_nonce_field( $id, "_qsnonce-$id" );
-		
+
 		// Determine the callback or fields argument
 		$callback = $fields = null;
 		if ( isset( $args['callback'] ) ) {
@@ -116,12 +127,32 @@ class Tools {
 			$callback = $args['fields'];
 		} elseif ( isset( $args['fields'] ) ) {
 			$fields = $args['fields'];
+		} elseif ( isset( $args['get_fields'] ) && is_callable( $args['get_fields'] ) ) {
+			/**
+			 * Dynamically generate the fields array.
+			 *
+			 * @since 1.6.0
+			 *
+			 * @param WP_Post $post The post object.
+			 * @param array   $args The original arguments for the metabox.
+			 * @param string  $id   The ID of the metabox.
+			 */
+			$fields = call_user_func( $args['get_fields'], $post, $args, $id );
 		}
 
 		// Wrap in container for any specific targeting needed
 		echo '<div class="qs-meta-box">';
 			if ( $callback ) {
-				// Pass the post, metabox args, and id if it's needed
+				/**
+				 * Build the HTML of the metabox.
+				 *
+				 * @since 1.3.0 Use $callback from 'fields' or 'callback' arg.
+				 * @since 1.0.0
+				 *
+				 * @param WP_Post $post The post object.
+				 * @param array   $args The original arguments for the metabox
+				 * @param string  $id   The ID of the metabox.
+				 */
 				call_user_func( $callback, $post, $args, $id );
 			} elseif ( isset( $args['fields'] ) ) {
 				// Build the fields
@@ -131,11 +162,11 @@ class Tools {
 	}
 
 	/**
-	 * Relabel the "post" post type
+	 * Relabel the "post" post type.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param mixed $label A string of the new label (singular) or an array of singular, plural for ms.
+	 * @param mixed $label Optional A string of the new label (singular) or an array of singular, plural for ms.
 	 */
 	public static function relabel_posts( $label = null ) {
 		if ( is_array( $label ) ) {
@@ -188,7 +219,7 @@ class Tools {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $enqueues An array of the scripts/styles to enqueue, sectioned by type ( js/css )
+	 * @param array $enqueues Optional An array of the scripts/styles to enqueue, sectioned by type (js/css).
 	 */
 	public static function enqueue( $enqueues = null ) {
 		if ( isset( $enqueues['css'] ) ) {
@@ -241,12 +272,12 @@ class Tools {
 	}
 
 	/**
-	 * Take care of uploading and inserting an attachment
+	 * Take care of uploading and inserting an attachment.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $file The desired entry in $_FILES
-	 * @param array $attachment Optional An array of data for the attachment to be written to wp_posts
+	 * @param array $file The desired entry in $_FILES.
+	 * @param array $attachment Optional An array of data for the attachment to be written to wp_posts.
 	 */
 	public static function upload( $file, $attachment = array() ) {
 		$file = wp_handle_upload( $file, array( 'test_for m' => false ) );
@@ -265,7 +296,7 @@ class Tools {
 			'post_content'   => '',
 			'post_mime_type' => $type,
 			'post_status'	 => 'publish',
-			'guid'           => $url
+			'guid'           => $url,
 		);
 
 		$attachment = wp_parse_args( $attachment, $defaults );
@@ -277,15 +308,15 @@ class Tools {
 
 		return $attachment_id;
 	}
-	
+
 	/**
-	 * Run the appropriate checks to make sure that
+	 * Run the appropriate checks to make sure that.
 	 * this save_post callback should proceed.
 	 *
 	 * @since 1.2.0
 	 *
 	 * @param int          $post_id     The ID of the post being saved.
-	 * @param string|array $post_type   The expected post type(s).
+	 * @param string|array $post_type   Optional The expected post type(s).
 	 * @param string       $nonce_name  Optional the name of the nonce field to check.
 	 * @param string       $nonce_value Optional the value of the nonce field to check.
 	 *
@@ -294,21 +325,21 @@ class Tools {
 	public static function save_post_check( $post_id, $post_type = null, $nonce_name = null, $nonce_value = null ) {
 		// Load the posted post type
 		$post_type_obj = get_post_type_object( $_POST['post_type'] );
-		
+
 		// Default post_type and nonce checks to true
 		$post_type_check = $nonce_check = true;
-		
+
 		// If post type is provided, check it
 		if ( ! is_null( $post_type ) ) {
 			csv_array_ref( $post_type );
 			$post_type_check = in_array( $post_type_obj->name, $post_type );
 		}
-		
+
 		// If nonce name & value are passed, check it
 		if ( ! is_null( $nonce_name ) ) {
 			$nonce_check = isset( $_POST[ $nonce_name ] ) && wp_verify_nonce( $_POST[ $nonce_name ], $nonce_value );
 		}
-		
+
 		// Check for autosave and post revisions
 		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) ||
 			wp_is_post_revision( $post_id ) ||
@@ -318,7 +349,7 @@ class Tools {
 			! current_user_can( $post_type_obj->cap->edit_post ) ) {
 			return false;
 		}
-		
+
 		return true;
 	}
 
@@ -327,11 +358,11 @@ class Tools {
 	// =========================
 
 	/**
-	 * Add various callbacks to specified hooks
+	 * Add various callbacks to specified hooks.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $hooks An array of callbacks, keyed by hook name
+	 * @param array $hooks An array of callbacks, keyed by hook name.
 	 */
 	public static function add_hooks( $hooks ) {
 		foreach ( $hooks as $hook => $callbacks ) {
@@ -349,11 +380,11 @@ class Tools {
 	}
 
 	/**
-	 * Add specified callbacks to various hooks ( good for adding a callback to multiple hooks... it could happen. )
+	 * Add specified callbacks to various hooks (good for adding a callback to multiple hooks... it could happen.).
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $callbacks An array of hooks, keyed by callback name
+	 * @param array $callbacks An array of hooks, keyed by callback name.
 	 */
 	public static function add_callbacks( $callbacks ) {
 		foreach ( $callbacks as $function => $hooks ) {
@@ -372,14 +403,14 @@ class Tools {
 	// =========================
 
 	/**
-	 * Simple div shortcode with name as class and attributes taken verbatim
+	 * Simple div shortcode with name as class and attributes taken verbatim.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $atts The array of attributes for the shortcode
-	 * @param string $content The content of the shortcode if applicable
-	 * @param string $tag The name of the shortcode being parsed
-	 * @return string $html The html of the processed shortcode
+	 * @param array $atts The array of attributes for the shortcode.
+	 * @param string $content The content of the shortcode if applicable.
+	 * @param string $tag The name of the shortcode being parsed.
+	 * @return string $html The html of the processed shortcode.
 	 */
 	public static function simple_shortcode( $atts, $content, $tag ) {
 		$html = '<div ';
@@ -401,12 +432,12 @@ class Tools {
 	}
 
 	/**
-	 * Setup a series of shortcodes, in tag => callback format
-	 * ( specify comma separated list of tags to have them all use the same callback )
+	 * Setup a series of shortcodes, in tag => callback format.
+	 * (specify comma separated list of tags to have them all use the same callback)
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param array $shortcodes The list of tags and their callbacks
+	 * @param array $shortcodes The list of tags and their callbacks.
 	 */
 	public static function register_shortcodes( $shortcodes ) {
 		csv_array_ref( $shortcodes );
@@ -428,11 +459,11 @@ class Tools {
 	// =========================
 
 	/**
-	 * Call the appropriate hide_[object] method(s)
+	 * Call the appropriate hide_[object] method(s).
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param mixed $objects An object name, comma separated string, or array of objects to disable
+	 * @param mixed $objects An object name, comma separated string, or array of objects to disable.
 	 */
 	public static function hide( $objects ) {
 		csv_array_ref( $objects );
@@ -445,7 +476,7 @@ class Tools {
 	}
 
 	/**
-	 * Remove Posts from menus and dashboard
+	 * Remove Posts from menus and dashboard.
 	 *
 	 * @since 1.0.0
 	 */
@@ -474,7 +505,7 @@ class Tools {
 	}
 
 	/**
-	 * Remove Pages from menus and dashboard
+	 * Remove Pages from menus and dashboard.
 	 *
 	 * @since 1.0.0
 	 */
@@ -506,8 +537,6 @@ class Tools {
 	 * Remove Comments from menus, dashboard, editor, etc.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @return bool true
 	 */
 	public static function hide_comments() {
 		// Remove Comment support from all post_types with it
@@ -538,12 +567,12 @@ class Tools {
 
 		// Remove Comments/Trackback meta boxes from post editor
 		add_action( 'admin_init', function() {
-			remove_meta_box( 'trackbacksdiv','post','normal' );
-			remove_meta_box( 'commentstatusdiv','post','normal' );
-			remove_meta_box( 'commentsdiv','post','normal' );
-			remove_meta_box( 'trackbacksdiv','page','normal' );
-			remove_meta_box( 'commentstatusdiv','page','normal' );
-			remove_meta_box( 'commentsdiv','page','normal' );
+			remove_meta_box( 'trackbacksdiv',    'post', 'normal' );
+			remove_meta_box( 'commentstatusdiv', 'post', 'normal' );
+			remove_meta_box( 'commentsdiv',      'post', 'normal' );
+			remove_meta_box( 'trackbacksdiv',    'page', 'normal' );
+			remove_meta_box( 'commentstatusdiv', 'page', 'normal' );
+			remove_meta_box( 'commentsdiv',      'page', 'normal' );
 		} );
 
 		// Remove Comments column from Posts/Pages editor
@@ -584,7 +613,7 @@ class Tools {
 	}
 
 	/**
-	 * Remove Links from menus and dashboard
+	 * Remove Links from menus and dashboard.
 	 *
 	 * @since 1.0.0
 	 */
@@ -613,38 +642,39 @@ class Tools {
 	}
 
 	/**
-	 * Remove the wp_head garbage
+	 * Remove the wp_head garbage.
 	 *
 	 * @since 1.0.0
 	 */
 	public static function hide_wp_head() {
 		// links for adjacent posts
-		remove_action('wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0);
+		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
 		// category feeds
-		remove_action('wp_head', 'feed_links_extra', 3);
+		remove_action( 'wp_head', 'feed_links_extra', 3 );
 		// post and comment feeds
-		remove_action('wp_head', 'feed_links', 2);
+		remove_action( 'wp_head', 'feed_links', 2 );
 		// index link
-		remove_action('wp_head', 'index_rel_link');
+		remove_action( 'wp_head', 'index_rel_link' );
 		// previous link
-		remove_action('wp_head', 'parent_post_rel_link', 10, 0);
-		remove_action('wp_head', 'rel_canonical', 10, 1);
+		remove_action( 'wp_head', 'parent_post_rel_link', 10, 0 );
+		remove_action( 'wp_head', 'rel_canonical', 10, 1 );
 		// EditURI link
-		remove_action('wp_head', 'rsd_link');
+		remove_action( 'wp_head', 'rsd_link' );
 		// start link
-		remove_action('wp_head', 'start_post_rel_link', 10, 0);
+		remove_action( 'wp_head', 'start_post_rel_link', 10, 0 );
 		// windows live writer
-		remove_action('wp_head', 'wlwmanifest_link');
+		remove_action( 'wp_head', 'wlwmanifest_link' );
 		// WP version
-		remove_action('wp_head', 'wp_generator');
+		remove_action( 'wp_head', 'wp_generator' );
 		// links for adjacent posts
-		remove_action('wp_head', 'wp_shortlink_wp_head', 10, 0);
+		remove_action( 'wp_head', 'wp_shortlink_wp_head', 10, 0 );
 
 		// remove WP version from css/js
 		$remove_ver = function( $src ) {
-			if ( strpos( $src, 'ver=' ) )
-	                $src = remove_query_arg( 'ver', $src );
-	        return $src;
+			if ( strpos( $src, 'ver=' ) ) {
+				$src = remove_query_arg( 'ver', $src );
+			}
+			return $src;
 		};
 		add_filter( 'style_loader_src', $remove_ver, 9999 );
 		add_filter( 'script_loader_src', $remove_ver, 9999 );
