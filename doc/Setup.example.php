@@ -198,7 +198,7 @@ QuickStart( array(
 				 * @type string|array A source url, or an array (numeric|associative)
 				 *		of the $src, $deps, $ver, $in_footer arguments.
 				 */
-				'google-maps' => 'https://maps.googleapis.com/maps/api/js?sensor=true'
+				'google-maps' => 'https://maps.googleapis.com/maps/api/js?sensor=true',
 				'mytheme' => array(
 					'src' => THEME_URL . '/js/admin.js',
 					'deps' => array( 'google-maps' ),
@@ -275,7 +275,7 @@ QuickStart( array(
 	 * @type array
 	 */
 	'post_types' => array(
-		'simple' // Creates a public, archive enabled post type.
+		'simple', // Creates a public, archive enabled post type.
 
 		/**
 		 * A post type to register.
@@ -423,7 +423,7 @@ QuickStart( array(
 			'post_type' => 'page, my_post_type',
 		),
 	),
-	
+
 	/**
 	 * A list of settings to register,
 	 * in $page => $settings format.
@@ -442,7 +442,7 @@ QuickStart( array(
 		 */
 		'general' => array(
 			'simple', // Adds a plain text input to the settings table.
-			
+
 			/**
 			 * A setting to register.
 			 *
@@ -467,7 +467,7 @@ QuickStart( array(
 			),
 		),
 	),
-	
+
 	/**
 	 * A list of admin pages to register,
 	 * in $slug => $args format.
@@ -515,7 +515,7 @@ QuickStart( array(
 	),
 ), array(
 	// The custom defaults
-	
+
 	/**
 	 * A list of default arguments for the sidebars.
 	 *
@@ -526,7 +526,7 @@ QuickStart( array(
 	'sidebar' => array(
 		'after_widget' => '</div><hr>',
 	),
-	
+
 	/**
 	 * A list of default arguments for the post_types.
 	 *
@@ -535,9 +535,9 @@ QuickStart( array(
 	 * @type array
 	 */
 	'post_type' => array(
-		'show_ui' => false	
+		'show_ui' => false
 	),
-	
+
 	/**
 	 * A list of default arguments for the taxonomies.
 	 *
@@ -546,9 +546,9 @@ QuickStart( array(
 	 * @type array
 	 */
 	'taxonomy' => array(
-		'hierarchical' => false	
+		'hierarchical' => false
 	),
-	
+
 	/**
 	 * A list of default arguments for the meta boxes.
 	 *
@@ -557,6 +557,6 @@ QuickStart( array(
 	 * @type array
 	 */
 	'meta_box' => array(
-		'priority' => 'low'	
+		'priority' => 'low'
 	),
 ) );
