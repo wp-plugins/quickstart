@@ -717,6 +717,7 @@ class Form {
 	/**
 	 * Build a file adder field.
 	 *
+	 * @since 1.6.2 Fixed template output to include $show option.
 	 * @since 1.6.0 Added qs-sortable class with data-axis attribute, quick sort support, "show" option.
 	 * @since 1.4.0 Overhauled markup/functionality.
 	 * @since 1.3.3
@@ -796,7 +797,7 @@ class Form {
 
 			// Print the template so javascript knows how to add new items
 			$html .= '<template class="qs-template">';
-				$html .= static::build_addfile_item( null, $name, $is_image, $is_multi, $use_sort );
+				$html .= static::build_addfile_item( null, $name, $is_image, $is_multi, $use_sort, $show );
 			$html .= '</template>';
 		$html .= '</div>';
 
