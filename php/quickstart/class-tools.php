@@ -54,6 +54,13 @@ class Tools {
 		$html = "<$tag";
 
 		foreach ( $atts as $attr => $value ) {
+			// Escape the value for attribute use
+			if ( is_string( $value ) ) {
+				$value = esc_attr( $value );
+			} elseif ( is_array( $value ) ) {
+				array_walk( $value, 'esc_attr' );
+			}
+			
 			if ( is_numeric ( $attr ) ) {
 				// Boolean attributes; method 1
 				$html .= " $value";
