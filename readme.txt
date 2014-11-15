@@ -3,7 +3,7 @@ Contributors: dougwollison
 Tags: development, function, utility, utilities, framework, code, coding
 Requires at least: 3.8
 Tested up to: 4.0.0
-Stable tag: 1.6.2
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -23,8 +23,11 @@ QuickStart is an ever expanding utility kit of handy functions, callbacks and to
 
 **Details on each release can be found [on the GitHub releases page](https://github.com/dougwollison/quickstart/releases) for this project.**
 
+= 1.7.0 =
+Added description option to field settings (prints a description paragraph after the field), also further refined input attribute filtering/escaping.
+
 = 1.6.2 =
-Added Google Analytics code helper to QuickStart\Template, attribute escaping to tag builder, minor bug fixes to addFile field.
+Added Google Analytics code helper to QuickStart\Template, minor bug fixes to addFile field.
 
 = 1.6.1 =
 Fixed bug with addFile not loading selected attachment in single mode, restructured files and added auto loading.
