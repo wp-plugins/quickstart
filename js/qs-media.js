@@ -302,6 +302,7 @@ window.QS = window.QS || {};
 	/**
 	 * Setup file adder functionality.
 	 *
+	 * @since 1.6.2 Fixed attachment date for just-uploaded files
 	 * @since 1.6.1 Fixed typo with single attachment check
 	 * @since 1.6.0 Moved sortable handling, added thubmnail check, show option, and initonly mode.
 	 * @since 1.5.0 Overhauled for live-plugin purposes.
@@ -400,8 +401,8 @@ window.QS = window.QS || {};
 							// Update preview accordingly
 							if ( preview.is( 'img' ) && 'image' === attachment.type ) {
 								// Preview is an image, update the source
-								// Preview is an image, update the source
-								if ( null === attachment.sizes.thumbnail ) {
+								// Use thumbnail or full size if unavailable
+								if ( null != attachment.sizes.thumbnail ) {
 									preview.attr( 'src', attachment.sizes.thumbnail.url );
 								} else {
 									preview.attr( 'src', attachment.sizes.full.url );
@@ -413,6 +414,11 @@ window.QS = window.QS || {};
 								} else {
 									preview.html( attachment.url.replace( /.+?([^\/]+)$/, '$1' ) );
 								}
+							}
+
+							// Convert the date if only a timestamp
+							if ( typeof attachment.date === 'number' ) {
+								attachment.date = new Date( attachment.date );
 							}
 
 							// Add data attributes for quick sort support
@@ -511,9 +517,17 @@ window.QS = window.QS || {};
 						_.each( attachments, function( attachment ) {
 							// Add the id to the items list
 							items.push( attachment.id );
+							
+							var src = '';
+							// Use thumbnail or full size if unavailable
+							if ( null != attachment.sizes.thumbnail ) {
+								src = attachment.sizes.thumbnail.url;
+							} else {
+								src = attachment.sizes.full.url;
+							}
 
 							// Create a new image with the thumbnail URL
-							img = $( '<img src="' + attachment.sizes.thumbnail.url + '">' );
+							img = $( '<img src="' + src + '">' );
 
 							// Add the new image to the preview
 							plugin.$preview.append( img );
