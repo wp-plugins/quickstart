@@ -13,6 +13,7 @@ class Form {
 	/**
 	 * Convert a field name to a valid ID.
 	 *
+	 * @since 1.8.0 Fixed to catch empty brackets.
 	 * @since 1.6.0 Fixed to catch all brackets.
 	 * @since 1.0.0
 	 *
@@ -22,6 +23,8 @@ class Form {
 	 */
 	public static function make_id( $name ) {
 		return preg_replace( '/\[(.+?)\]/', '_$1', $name );
+		$name = str_replace( '[]', '', $name );
+		return $name;
 	}
 
 	/**
@@ -40,6 +43,7 @@ class Form {
 	/**
 	 * Generate the format string to use in sprintp.
 	 *
+	 * @since 1.7.0 Added %description placeholder and qs-field-[side] class.
 	 * @since 1.5.0 Added %id-field id.
 	 * @since 1.4.0
 	 *
@@ -51,12 +55,14 @@ class Form {
 	public static function build_field_wrapper( $side = 'left', $tag = 'div' ) {
 		$format = '<' . $tag . ' class="qs-field %type %wrapper_class" id="%id-field">';
 
-		$label = '<label for="%id" class="qs-label">%label</label>';
+		$label = '<label for="%id" class="qs-label qs-label-' . $side . '">%label</label>';
 		if ( $side == 'right' ) {
 			$format .= "%input $label";
 		} else {
 			$format .= "$label %input";
 		}
+
+		$format .= '%description';
 
 		$format .= '</' . $tag . '>';
 
@@ -66,6 +72,7 @@ class Form {
 	/**
 	 * Wrap the field in a label, if wrap_with_label is true.
 	 *
+	 * @since 1.7.0 Added handling of description option, mild restructuring.
 	 * @since 1.4.0 Renamed $html to $input, revised $format handling.
 	 * @since 1.0.0
 	 *
@@ -76,23 +83,29 @@ class Form {
 	 * @return string The processed HTML.
 	 */
 	public static function maybe_wrap_field( $input, $settings, $format = null ) {
-		// If format setting exists, overwrite $format with it
-		if ( isset( $settings['format'] ) ) {
-			$format = $settings['format'];
-		}
-
-		// If no format provided, make it an empty array
-		if ( is_null( $format ) ) {
-			$format = array();
-		}
-
-		// If $format is an array, run through build_field_wrapper()
-		if ( is_array( $format ) ) {
-			$format = call_user_func_array( 'static::build_field_wrapper', $format );
+		// If a description is set, prep it
+		if ( isset( $settings['description'] ) && ! empty( $settings['description'] ) ) {
+			$settings['description'] = sprintf( '<p class="description">%s</p>', $settings['description'] );
+		} else {
+			// Make sure it's set but blank if not
+			$settings['description'] = '';
 		}
 
 		if ( isset( $settings['wrap_with_label'] ) && $settings['wrap_with_label'] ) {
-			$settings['input'] = $input;
+			// If format setting exists, overwrite $format with it
+			if ( isset( $settings['format'] ) ) {
+				$format = $settings['format'];
+			}
+
+			// If no format is provided, make it an empty array
+			if ( is_null( $format ) ) {
+				$format = array();
+			}
+
+			// If $format is an array, run through build_field_wrapper()
+			if ( is_array( $format ) ) {
+				$format = call_user_func_array( array( get_called_class(), 'build_field_wrapper' ), $format );
+			}
 
 			/**
 			 * Filter the format string to be used.
@@ -104,8 +117,13 @@ class Form {
 			 */
 			$format = apply_filters( 'qs_form_field_wrap_format', $format, $settings );
 
+			// Store the input HTML in the 'input' setting for sprintp()
+			$settings['input'] = $input;
+
 			return sprintp( $format, $settings );
 		} else {
+			// Manually append the description
+			$input .= $settings['description'];
 			return $input;
 		}
 	}
@@ -113,18 +131,20 @@ class Form {
 	/**
 	 * Get the value to use for the field.
 	 *
+	 * @since 1.8.0 Added $single param.
 	 * @since 1.6.0 Added use of extract_value().
 	 * @since 1.4.0
 	 *
 	 * @uses extract_value()
 	 *
-	 * @param mixed  $data The raw data source.
-	 * @param string $type The type of source to expect (e.g. "post", "option", "array", or "raw").
-	 * @param string $key  The field to extract from the source.
+	 * @param mixed  $data   The raw data source.
+	 * @param string $type   The type of source to expect (e.g. "post", "option", "array", or "raw").
+	 * @param string $key    The field to extract from the source.
+	 * @param bool   $single Wether the data is stored in a single or multiple entries (postmeta only).
 	 *
 	 * @return mixed The extracted value.
 	 */
-	public static function get_value( $data, $type, $key ) {
+	public static function get_value( $data, $type, $key, $single = true ) {
 		if ( preg_match( '/([\w-]+)\[([\w-]+)\](.*)/', $key, $matches ) ) {
 			// Field is an array map, get the actual key...
 			$key = $matches[1];
@@ -139,7 +159,7 @@ class Form {
 				if ( is_object( $data ) ) {
 					$data = $data->ID;
 				}
-				$value = get_post_meta( $data, $key, true );
+				$value = get_post_meta( $data, $key, $single );
 				break;
 			case 'option':
 				// Get the matching option value
@@ -165,6 +185,8 @@ class Form {
 	/**
 	 * Build a single field, based on the passed configuration data.
 	 *
+	 * @since 1.8.0 Added use of "save_single" option, "default" value option,
+	 * 				"data_name" value now defaults to the same as "name".
 	 * @since 1.6.0 Added qs_field_ prefix to field id, get_value() use for callback.
 	 * @since 1.5.0 Added "taxonomy" option handling.
 	 * @since 1.4.2 Added "get_value" and "post_field" option handling.
@@ -178,7 +200,7 @@ class Form {
 	 * @param string $field    The name/id of the field.
 	 * @param array  $settings Optional The settings to use in creating the field.
 	 * @param mixed  $data     Optional The source for the value; use $source argument to specify.
-	 * @param string $source   Optional The type of value source; see static::get_value().
+	 * @param string $source   Optional The type of value source; see Form::get_value().
 	 * @param bool   $wrap     Optional Default value for wrap_with_label option.
 	 *
 	 * @return string The HTML for the field.
@@ -210,10 +232,36 @@ class Form {
 			'data_name'       => $field, // The name of the postmeta or option to retrieve
 			'wrap_with_label' => $wrap, // Wether or not to wrap the field in a label
 			'wrapper_class'   => '', // The class to apply to the wrapper
+			'save_single'     => true, // Wether or not to save multiple values in a single entry
 		);
 
 		// Parse the passed settings with the defaults
 		$settings = wp_parse_args( $settings, $default_settings );
+
+		// If no data_name is set, make it the same as name
+		if ( ! isset( $settings['data_name'] ) ) {
+			$settings['data_name'] = $settings['name'];
+		}
+
+		// Check if condition callback exists; test it before proceeding
+		if ( isset( $settings['condition'] ) && is_callable( $settings['condition'] ) ) {
+			/**
+			 * Test if the field should be printed.
+			 *
+			 * @since 1.8.0
+			 *
+			 * @param mixed  $data     The source for the value.
+			 * @param string $source   The type of value source.
+			 * @param string $field    The name/id of the field.
+			 * @param array  $settings The settings to use in creating the field.
+			 *
+			 * @return bool The result of the test.
+			 */
+			$result = call_user_func( $settings['condition'], $data, $source, $field, $settings );
+
+			// If test fails, don't print the field
+			if ( ! $result ) return;
+		}
 
 		// Get the value to use, first by checking if the "get_value" callback is present
 		if ( isset( $settings['get_value'] ) && is_callable( $settings['get_value'] ) ) {
@@ -247,7 +295,12 @@ class Form {
 			$settings['values'] = simplify_object_array( $tax_terms, 'term_id', 'name' );
 		} else {
 			// Otherwise, use the built in get_value method
-			$value = static::get_value( $data, $source, $settings['data_name'] );
+			$value = static::get_value( $data, $source, $settings['data_name'], $settings['save_single'] );
+		}
+
+		// If the value is empty, and a default value has been provided, use that
+		if ( ( is_null( $value ) || $value === '' ) && isset( $settings['default'] ) ){
+			$value = $settings['default'];
 		}
 
 		// Set a default value for the class setting;
@@ -309,7 +362,7 @@ class Form {
 		 * @param mixed  $settings The settings for this field.
 		 * @param mixed  $value    The processed value for this field.
 		 * @param mixed  $data     The source of the value for this field.
-		 * @param string $source   The type of value source; see static::get_value().
+		 * @param string $source   The type of value source; see Form::get_value().
 		 *
 		 * @return string The HTML of the field.
 		 */
@@ -327,8 +380,8 @@ class Form {
 	 * @since 1.0.0
 	 *
 	 * @param string $fields The name/id of the field.
-	 * @param array  $data   Optional The source for the values; see static::build_field() for details.
-	 * @param string $source Optional Identifies the type of values source; see static::build_field() for details.
+	 * @param array  $data   Optional The source for the values; see Form::build_field() for details.
+	 * @param string $source Optional Identifies the type of values source; see Form::build_field() for details.
 	 * @param mixed  $echo   Optional Wether or not to echo the output.
 	 * @param bool   $wrap   Optional Default value for wrap_with_label option.
 	 *
@@ -420,6 +473,7 @@ class Form {
 	/**
 	 * Build a select field.
 	 *
+	 * @since 1.8.0 Added support for option groups.
 	 * @since 1.5.0 Add "null" option handling.
 	 * @since 1.4.2 Added [] to field name when multiple is true.
 	 * @since 1.0.0
@@ -454,12 +508,30 @@ class Form {
 				$val = $label;
 			}
 
-			$options .= sprintf(
-				'<option value="%s" %s> %s</option>',
-				$val,
-				in_array( $val, (array) $value ) ? 'selected' : '',
-				$label
-			);
+			// If $label is an array, handle as an optgroup
+			if ( is_array( $label ) ) {
+				$suboptions = '';
+				$is_sub_assoc = is_assoc( $label );
+				foreach ( $label as $subval => $sublabel ) {
+					if ( ! $is_sub_assoc ) {
+						$subval = $sublabel;
+					}
+					$suboptions .= sprintf(
+						'<option value="%s" %s>%s</option>',
+						$subval,
+						in_array( $subval, (array) $value ) ? 'selected' : '',
+						$sublabel
+					);
+				}
+				$options .= sprintf( '<optgroup label="%s">%s</optgroup>', $val, $suboptions );
+			} else {
+				$options .= sprintf(
+					'<option value="%s" %s>%s</option>',
+					$val,
+					in_array( $val, (array) $value ) ? 'selected' : '',
+					$label
+				);
+			}
 		}
 
 		// Build the <select>
@@ -473,6 +545,7 @@ class Form {
 	/**
 	 * Build a checkbox field.
 	 *
+	 * @since 1.8.0 Fixed dummy field to have a 0 value, not null.
 	 * @since 1.4.2 Added $dummy argument and printing of dummy input for null value.
 	 * @since 1.4.1 Added modified default value for $wrapper.
 	 * @since 1.0.0
@@ -503,7 +576,7 @@ class Form {
 			$hidden = Tools::build_tag( 'input', array(
 				'type' => 'hidden',
 				'name' => $settings['name'],
-				'value' => null,
+				'value' => 0,
 			) );
 		}
 
@@ -660,126 +733,105 @@ class Form {
 	}
 
 	/**
-	 * Build a single file adder item.
+	 * Build a media attachment manager.
 	 *
-	 * @since 1.6.0 Added quick sort support.
-	 * @since 1.4.0
+	 * Replaces addfile, setimage and editgallery.
 	 *
-	 * @param int    $id       The ID of the attachment to use.
-	 * @param string $name     The name of the file adder field.
-	 * @param bool   $is_image Wether or not this is for images or any file.
-	 * @param bool   $is_multi Wether or not this supports multiple files.
-	 * @param bool   $use_sort Wether or not quick sort is desired.
-	 * @param string $show     What to display of the non-image file (title|filename).
-	 *
-	 * @return string The markup fo the item.
-	 */
-	public static function build_addfile_item( $id, $name, $is_image, $is_multi, $use_sort, $show ) {
-		if ( $use_sort && ! is_null( $id ) ) {
-			// Setup item for quick sort support
-			$item_name = sanitize_title( basename( wp_get_attachment_url( $id ) ) );
-			$item_date = get_the_date( 'U' );
-			$html = sprintf( '<div class="qs-item" data-name="%s" data-date="%s">', $item_name, $item_date );
-		} else {
-			$html = '<div class="qs-item">';
-		}
-
-		if ( is_null( $id ) ) {
-			// No id passed, print a blank
-			$html .= $is_image ? '<img class="qs-preview" />' : '<span class="qs-preview"></span>';
-		} elseif ( $is_image ) {
-			// Image mode, print the thumbnail
-			$html .= wp_get_attachment_image( $id, 'thumbnail', false, array(
-				'class' => 'qs-preview',
-			) );
-		} else {
-			// Any kind of file, print the attachment title or filename
-			$preview = basename( wp_get_attachment_url( $id ) );
-			if ( $show == 'title' ) {
-				$preview = get_the_title( $id );
-			}
-			$html .= '<span class="qs-preview">' . $preview . '</span>';
-		}
-
-		// Add delete button and field name brackets if in mulitple mode
-		if ( $is_multi ) {
-			$html .= '<button type="button" class="button qs-delete">Delete</button>';
-			$name .= '[]';
-		}
-
-		// Add the input field for this item
-		$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $name, $id );
-
-		$html .= '</div>';
-		return $html;
-	}
-
-	/**
-	 * Build a file adder field.
-	 *
-	 * @since 1.6.0 Added qs-sortable class with data-axis attribute, quick sort support, "show" option.
-	 * @since 1.4.0 Overhauled markup/functionality.
-	 * @since 1.3.3
+	 * @since 1.8.0
 	 *
 	 * @see Form::build_generic()
 	 */
-	public static function build_addfile( $settings, $value ) {
+	public static function build_media( $settings, $value ) {
 		// Get the field name
-		$name = $settings['name'];
+		$field_name = $settings['name'];
 
-		// Determine if this is a muti-item adder
-		$is_multi = isset( $settings['multiple'] ) && $settings['multiple'];
+		// Determine gallery mode support
+		$is_gallery = isset( $settings['gallery'] ) ? $settings['gallery'] : false;
 
-		// Determine if use of quick sort buttons is desired
+		// Determine multiple file support (not the same as gallery)
+		$is_multi = ! $is_gallery && isset( $settings['multiple'] ) && $settings['multiple'];
+
+		// Determine quicksort utility support
 		$use_sort = $is_multi && isset( $settings['quicksort'] ) && $settings['quicksort'];
 
-		// Determine the media type
-		$media = isset( $settings['media'] ) ? $settings['media'] : null;
+		// Determine media type support (defaults to any, or image if gallery)
+		$media = isset( $settings['media'] ) ? $settings['media'] : ( $is_gallery ? 'image' : null );
 
-		// Determine what to display for plain files (default to filename)
-		$show = isset( $settings['show'] ) ? $settings['show'] : 'filename';
+		// Determine display mode for text (title, filename, or none, default none for image type)
+		$show = isset( $settings['display'] ) ? $settings['display'] : ( $media == 'image' ? false : 'filename' );
 
-		// Flag for if we're using images only or not
-		$is_image = $media == 'image';
+		// Determin icon support (for multiple, non-image items)
+		$icon = isset( $settings['icon'] ) ? $settings['icon'] : false;
 
-		// If the label seems auto generated, modify the label text to Add/Choose
-		if ( $settings['label'] == make_legible( $name ) ) {
-			$settings['label'] = ( $is_multi ? 'Add' : 'Choose' ) . ' ' . $settings['label'];
+		// Build the Add/Remove Labels
+		if ( ! isset( $settings['add_label'] ) ) {
+			$settings['add_label'] = ( $is_multi ? 'Add' : 'Set' ) . ' ' . $settings['label'];
+		}
+		if ( ! isset( $settings['remove_label'] ) ) {
+			$settings['remove_label'] = $is_multi ? 'Clear' : 'Remove ' . $settings['label'];
 		}
 
 		// Setup the classes for the container
-		$classes = array( 'qs-field', 'qs-media', 'qs-addfile' );
-		if ( $is_multi ) {
-			$classes[] = 'multiple';
+		$classes = array( 'qs-field', 'qs-media' );
+		if ( $media != 'image' ) {
+			$classes[] = 'media-file';
 		}
 		if ( $media ) {
-			$classes[] = 'media-' . $media;
+			$classes[] = 'media-' . sanitize_title( $media );
+		}
+		if ( $is_gallery ) {
+			$classes[] = 'gallery';
+		} elseif ( $is_multi ) {
+			$classes[] = 'multiple';
+		} else {
+			$classes[] = 'single';
 		}
 
 		// Begin the markup for this component
-		$html = sprintf( '<div class="%s" data-type="%s" data-show="%s">', implode( ' ', $classes ), $media, $show );
-			// The button to open the media manager
-			$html .= '<button type="button" class="button button-primary qs-button">' . $settings['label'] . '</button>';
+		$html = sprintf( '<div id="%s" class="%s" data-type="%s" data-show="%s" data-mode="%s">', $settings['id'], implode( ' ', $classes ), $media, $show, $is_gallery ? 'gallery' : 'normal' );
 
-			// A button to clear all items currently loaded
+		// Special output for certain conditions
+		if ( $is_gallery ) {
+			// If the label seems auto generated, modify the label text to Edit [label]
+			if ( $settings['label'] == make_legible( $settings['name'] ) ) {
+				$settings['label'] = 'Edit ' . $settings['label'];
+			}
+
+			// The button to open the gallery editor
+			$html .= '<button type="button" class="button-primary qs-button">' . $settings['label'] . '</button>';
+
+			// The button to clear all existing items
 			$html .= ' <button type="button" class="button qs-clear">Clear</button>';
 
-			// Start the preview list container, adding sortable class and axis if needed
-			$html .= sprintf( '<div class="qs-container %s" %s>', $is_multi ? 'qs-sortable' : '', $is_image ? '' : 'data-axis="y"' );
+			// The preview container with the list of images
+			$html .= '<div class="qs-preview">';
+			if ( $value ) {
+				foreach ( explode( ',', $value ) as $image ) {
+					$html .= wp_get_attachment_image( $image, 'thumbnail', true, array( 'data-id' => $image ) );
+				}
+			}
+			$html .= '</div>';
+
+			// The value input to hold the ID list
+			$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $field_name, $value );
+		} elseif ( $is_multi ) {
+			// The button to open the media manager
+			$html .= '<button type="button" class="button button-primary qs-button">' . $settings['add_label'] . '</button>';
+
+			// The button to clear all existing items
+			$html .= ' <button type="button" class="button qs-clear">' . $settings['remove_label'] . '</button>';
+
+			// Start the preview list container, adding axis setting for non-image media types
+			$html .= sprintf( '<div class="qs-container qs-sortable" %s>', $media == 'image' ? '' : 'data-axis="y"' );
 			// Print the items if present
 			if ( $value ) {
-				// Process into an appropriate array
-				$value = (array) $value;
+				// Ensure value is in the form of an array
+				csv_array_ref( $value );
 
 				// Loop through each image and print an item
-				foreach ( $value as $file ) {
+				foreach ( $value as $attachment_id ) {
 					// Add an item for the current file
-					$html .= static::build_addfile_item( $file, $name, $is_image, $is_multi, $use_sort, $show );
-
-					// If we're only to do a single item, break now.
-					if ( ! $is_multi ) {
-						break;
-					}
+					$html .= static::build_media_item( $attachment_id, $field_name, $show, $icon );
 				}
 			}
 			$html .= '</div>';
@@ -796,52 +848,183 @@ class Form {
 
 			// Print the template so javascript knows how to add new items
 			$html .= '<template class="qs-template">';
-				$html .= static::build_addfile_item( null, $name, $is_image, $is_multi, $use_sort );
+				$html .= static::build_media_item( null, $field_name, $show );
 			$html .= '</template>';
+		} else {
+			// Build a simple version similar to the Featured Image box
+			$html .= '<div class="qs-container">';
+				$html .= '<a href="#" class="qs-preview qs-button" title="' . $settings['add_label'] . '">';
+				if ( $value ) {
+					$preview = rawurldecode( basename( wp_get_attachment_url( $value ) ) );
+					if ( $show == 'title' ) {
+						$preview = get_the_title( $value );
+					}
+
+					$html .= wp_get_attachment_image( $value, 'medium', true, array(
+						'title' => $preview,
+					) );
+				} else {
+					$html .= $settings['add_label'];
+				}
+				$html .= '</a>';
+
+				// The value input to hold the ID
+				$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $field_name, $value );
+			$html .= '</div>';
+
+			// Add the remove button
+			$html .= '<a href="#" class="qs-clear">' . $settings['remove_label'] . '</a>';
+		}
+
 		$html .= '</div>';
 
 		return $html;
 	}
 
 	/**
+	 * Build a single media manager item.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @param int            $attachment_id The ID of the attachment to use.
+	 * @param string         $field_name    The name of the file adder field.
+	 * @param string|boolean $show          What text to display with the image/icon (title|filename|FALSE).
+	 * @param boolean        $icon          Wether or not to display the icon for non-image files.
+	 *
+	 * @return string The markup fo the item.
+	 */
+	protected static function build_media_item( $attachment_id, $field_name, $show, $icon ) {
+		// Setup item for quicksort support
+		$item_name = sanitize_title( basename( wp_get_attachment_url( $attachment_id ) ) );
+		$item_date = get_the_date( 'U', $attachment_id );
+		$html = sprintf( '<div class="qs-item" data-name="%s" data-date="%s">', $item_name, $item_date );
+
+		$html .= '<div class="qs-preview">';
+		if ( $attachment_id ) {
+			$html .= wp_get_attachment_image( $attachment_id, 'thumbnail', $icon );
+
+			if ( $show ) {
+				$preview = rawurldecode( basename( wp_get_attachment_url( $attachment_id ) ) );
+				if ( $show == 'title' ) {
+					$preview = get_the_title( $attachment_id );
+				}
+				$html .= '<span class="qs-preview-text">' . $preview . '</span>';
+			}
+		}
+		$html .= '</div>';
+
+		// Add delete button and field name brackets if in mulitple mode
+		$html .= '<button type="button" class="button qs-delete">Delete</button>';
+
+		// Add the input field for this item (and append [] to the field name)
+		$html .= sprintf( '<input type="hidden" name="%s[]" value="%s" class="qs-value">', $field_name, $attachment_id );
+
+		$html .= '</div>';
+		return $html;
+	}
+
+	/**
+	 * Build a file adder field.
+	 *
+	 * @deprecated 1.8.0 Use build_media() instead (now an alias).
+	 *
+	 * @since 1.6.2 Fixed template output to include $show option.
+	 * @since 1.6.0 Added qs-sortable class with data-axis attribute, quick sort support, "show" option.
+	 * @since 1.4.0 Overhauled markup/functionality.
+	 * @since 1.3.3
+	 *
+	 * @see Form::build_media()
+	 */
+	public static function build_addfile( $settings, $value ) {
+		return self::build_media( $settings, $value );
+	}
+
+	/**
 	 * Build an image setter field.
+	 *
+	 * @deprecated 1.8.0 Use build_media() instead (now an alias).
 	 *
 	 * @since 1.4.0 Reduced to alias of build_addfile
 	 * @since 1.0.0
 	 *
-	 * @see Form::build_addfile()
+	 * @see Form::build_media()
 	 */
 	public static function build_setimage( $settings, $value ) {
 		// Force the media type to image
 		$settings['media'] = 'image';
 
-		return static::build_addfile( $settings, $value );
+		return self::build_media( $settings, $value );
 	}
 
 	/**
 	 * Build a gallery editor field.
 	 *
+	 * @deprecated 1.8.0 Use build_media() instead (now an alias).
+	 *
 	 * @since 1.6.0 Added clear button, data-id to image for inline sortability.
 	 * @since 1.4.0 Added semi-intelligent button text guessing.
 	 * @since 1.0.0
 	 *
-	 * @see Form::build_generic()
+	 * @see Form::build_gallery()
 	 */
 	public static function build_editgallery( $settings, $value ) {
-		// If the label seems auto generated, modify the label text to Edit [label]
-		if ( $settings['label'] == make_legible( $settings['name'] ) ) {
-			$settings['label'] = 'Edit ' . $settings['label'];
+		// Force the media type to image
+		$settings['gallery'] = true;
+
+		return self::build_media( $settings, $value );
+	}
+
+	/**
+	 * Build a repeater interface.
+	 *
+	 * @since 1.8.0 Modified handling of template option for simpler templates.
+	 *              Also update default labeling to use singular form.
+	 * @since 1.5.0
+	 *
+	 * @see Form::build_generic()
+	 */
+	public static function build_repeater( $settings, $data ) {
+		if ( ! isset( $settings['template'] ) ) {
+			// Default to single generic text field
+			$settings['template'] = array(
+				'class' => 'widefat',
+			);
 		}
 
-		$html = '<div class="qs-field qs-media qs-editgallery">';
-			$html .= '<button type="button" class="button-primary qs-button">' . $settings['label'] . '</button>';
+		// Get the field name
+		$name = $settings['name'];
+
+		// Get the value to use, based on $source and the data_name
+		$values = static::get_value( $data, $source, $field );
+
+		// If the label seems auto generated, modify the label text to Add
+		if ( $settings['label'] == make_legible( $name ) ) {
+			$settings['label'] = 'Add ' . singularize( $settings['label'] );
+		}
+
+		// Write the repeater container
+		$html = sprintf( '<div class="qs-repeater" id="%s-repeater">', $name );
+			// The button to open the media manager
+			$html .= '<button type="button" class="button button-primary qs-add">' . $settings['label'] . '</button>';
+
+			// A button to clear all items currently loaded
 			$html .= ' <button type="button" class="button qs-clear">Clear</button>';
-			$html .= '<div class="qs-preview">';
-			foreach ( explode( ',', $value ) as $image ) {
-				$html .= wp_get_attachment_image( $image, 'thumbnail', false, array( 'data-id' => $image ) );
+
+			// Write the repeater item template
+			$html .= '<template class="qs-template">';
+				$html .= static::build_repeater_item( $settings );
+			$html .= '</template>';
+
+
+			// Write the existing items if present
+			$html .= '<div class="qs-container qs-sortable" data-axis="y">';
+			if ( $values ) {
+				// Loop through each entry in the data, write the items
+				foreach ( $values as $i => $item ) {
+					$html .= static::build_repeater_item( $settings, $item, $i );
+				}
 			}
 			$html .= '</div>';
-			$html .= sprintf( '<input type="hidden" name="%s" value="%s" class="qs-value">', $settings['name'], $value );
 		$html .= '</div>';
 
 		return $html;
@@ -850,6 +1033,7 @@ class Form {
 	/**
 	 * Build a single repeater item.
 	 *
+	 * @since 1.8.0 Revised handling of template settings; now uses build_repeater_item_field().
 	 * @since 1.5.0
 	 *
 	 * @param array $repeater The settings of the repeater.
@@ -857,10 +1041,11 @@ class Form {
 	 * @param int   $i        Optional The item's number (-1 for template).
 	 */
 	private static function build_repeater_item( $repeater, $item = null, $i = -1 ) {
-		$fields = csv_array( $repeater['template'] );
+		$name = $repeater['name'];
+		$template = $repeater['template'];
 
 		$html = '<div class="qs-item">';
-			if ( is_callable( $fields ) ) {
+			if ( is_callable( $template ) ) {
 				/**
 				 * Custom callback for building a repeater item.
 				 *
@@ -873,84 +1058,174 @@ class Form {
 				 *
 				 * @return string The HTML of the repeater item.
 				 */
-				$html .= call_user_func( $fields, $item, $i );
-			} elseif ( is_array( $fields ) ) {
-				// Loop through each field in the template, and build them
-				foreach ( $fields as $field => $settings ) {
-					make_associative( $field, $settings );
+				$html .= call_user_func( $template, $item, $i );
+			} elseif ( is_array( $template ) ) {
+				$html .= '<div class="qs-item-fields">';
+				if ( isset( $template['fields'] ) ) {
+					// Loop through each field for the template, and build them
+					foreach ( $template['fields'] as $field => $settings ) {
+						make_associative( $field, $settings );
 
-					// Create the name for the field
-					$settings['name'] = sprintf( '%s[%d][%s]', $repeater['name'], $i, $field );
-
-					// Create the ID for the field
-					$settings['id'] = static::make_id( $field ) . '-';
-
-					// Add a unique string to the end of the ID or a % placeholder for the blank
-					$settings['id'] .= $i == -1 ? '%' : substr( md5( $field.$i ), 0, 6 );
-
-					// Set the value for the field
-					if ( is_null( $item ) || ! isset( $item[ $field ] ) ) {
-						$value = '';
-					} else {
-						$value = $item[ $field ];
+						$html .= static::build_repeater_item_field( $name, $settings, $item, $i, $field );
 					}
-
-					// Finally, build the field
-					$html .= static::build_field( $field, $settings, $value );
+				} else {
+					// Default wrap_with_label to false
+					if ( ! isset( $template['wrap_with_label'] ) ) {
+						$template['wrap_with_label'] = false;
+					}
+					$html .= static::build_repeater_item_field( $name, $template, $item, $i );
 				}
+				$html .= '</div>';
+
+				// Add the delete button
+				$html .= '<button type="button" class="button qs-delete">Delete</button>';
 			}
-			$html .= '<button type="button" class="button qs-delete">Delete</button>';
 		$html .= '</div>';
 
 		return $html;
 	}
 
 	/**
-	 * Build a repeater interface.
+	 * Build a single field for a single repeater item.
 	 *
-	 * @since 1.5.0
+	 * @since 1.8.0
+	 *
+	 * @param string $field    The name of the field this item is for.
+	 * @param array  $settings The settings for the field.
+	 * @param mixed  $item     Optional The item data.
+	 * @param int    $i        Optional The item's number (-1 for template).
+	 * @param string $subfield Optional The name of this specific field.
+	 */
+	private static function build_repeater_item_field( $field, $settings, $item = null, $i = -1, $subfield = null) {
+		// Create the name for the field
+		if ( ! is_null( $subfield ) ) {
+			$settings['name'] = sprintf( '%s[%d][%s]', $field, $i, $subfield );
+		} else {
+			$settings['name'] = sprintf( '%s[]', $field );
+		}
+
+		$id = ! is_null( $subfield ) ? $subfield : $field;
+
+		// Create the ID for the field
+		$settings['id'] = static::make_id( $id ) . '-';
+
+		// Add a unique string to the end of the ID or a % placeholder for the blank
+		$settings['id'] .= $i == -1 ? '%' : substr( md5( $id . $i ), 0, 6 );
+
+		// Set the value for the field
+		$value = null;
+		if ( ! is_null( $subfield ) ) {
+			// Must get a specific value from the item data
+			if ( is_array( $item ) && isset( $item[ $id ] ) ) {
+				$value = $item[ $id ];
+			}
+		} else {
+			// The item data is the value itself
+			$value = $item;
+		}
+
+		// Finally, build the field
+		return static::build_field( $id, $settings, $value );
+	}
+
+	/**
+	 * Build a rich text editor.
+	 *
+	 * @since 1.8.0
 	 *
 	 * @see Form::build_generic()
 	 */
-	public static function build_repeater( $settings, $data ) {
-		if ( ! isset( $settings['template'] ) ) {
-			throw new Exception( 'Repeater fields MUST have a template parameter.' );
-		}
-
+	public static function build_editor( $settings, $data ) {
 		// Get the field name
 		$name = $settings['name'];
 
-		// Get the value to use, based on $source and the data_name
-		$values = static::get_value( $data, $source, $field );
-
-		// If the label seems auto generated, modify the label text to Add/Choose
-		if ( $settings['label'] == make_legible( $name ) ) {
-			$settings['label'] = 'Add ' . $settings['label'];
+		// Create the editor_id from the name if not present or valid
+		if ( ! isset( $settings['id'] ) || preg_match( '/\W+/', $settings['id'] ) ) {
+			$settings['id'] = preg_replace( '/\W+/', '', strtolower( $name ) ) . '_qseditor';
 		}
 
-		// Write the repeater container
-		$html = sprintf( '<div class="qs-repeater" id="%s-repeater">', $name );
-			// The button to open the media manager
-			$html .= '<button type="button" class="button button-primary qs-button">' . $settings['label'] . '</button>';
+		// Make the textarea_name setting that of the name setting
+		$settings['textarea_name'] = $name;
 
-			// A button to clear all items currently loaded
-			$html .= ' <button type="button" class="button qs-clear">Clear</button>';
+		// Make the textarea_class setting that of the class setting if present
+		if ( isset( $settings['class'] ) ) {
+			$settings['textarea_class'] = $settings['class'];
+		}
 
-			// Write the repeater item template
-			$html .= '<template class="qs-template">';
-				$html .= static::build_repeater_item( $settings );
-			$html .= '</template>';
+		// Make the textarea_rows setting that of the rows setting if present
+		if ( isset( $settings['rows'] ) ) {
+			$settings['textarea_rows'] = $settings['rows'];
+		}
 
+		// Handle any QuickTags settings if present
+		if ( isset( $settings['quicktags'] ) ) {
+			Hooks::do_quicktags( $settings['quicktags'], $settings['id'] );
 
-			// Write the existing items if present
-			$html .= '<div class="qs-container">';
-			if ( $values ) {
-				// Loop through each entry in the data, write the items
-				foreach ( $values as $i => $item ) {
-					$html .= static::build_repeater_item( $settings, $item, $i );
-				}
+			// Also format into proper from
+			$settings['quicktags'] = array(
+				'buttons' => $settings['quicktags'],
+			);
+		}
+
+		// Write the editor container
+		$html = sprintf( '<div class="qs-editor" id="%s-editor">', $name );
+			ob_start();
+			// Print out the editor
+			wp_editor( $data, $settings['id'], $settings );
+			$html .= ob_get_clean();
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * Build a google map field for setting coordinates.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @see Form::build_generic()
+	 */
+	public static function build_map( $settings, $data ) {
+		// Get the field name
+		$name = $settings['name'];
+
+		// Setup data attributes (default values and api key)
+		$data_atts = array();
+		$usable_atts = array( 'lat', 'lng', 'zoom', 'key' );
+		foreach ( $usable_atts as $attr ) {
+			if ( isset( $settings[ $attr ] ) ) {
+				$data_atts[] = 'data-' . $attr . '="' . $settings[ $attr ] . '"';
 			}
-			$html .= '</div>';
+		}
+
+		// Default values for the data
+		$data = wp_parse_args( $data, array(
+			'lat' => null,
+			'lng' => null,
+			'zoom' => null,
+		) );
+
+		// Write the map container
+		$html = sprintf( '<div class="qs-map" id="%s-map" %s>', $name, implode( ' ', $data_atts ) );
+			// Print the hidden fields (lat, lng, zoom)
+			$field = '<input type="hidden" name="%2$s[%1$s]" class="qs-value-%1$s" value="%3$s" />';
+			$html .= sprintf( $field, 'lat', $name, $data['lat'] );
+			$html .= sprintf( $field, 'lng', $name, $data['lng'] );
+			$html .= sprintf( $field, 'zoom', $name, $data['zoom'] );
+
+			// Add the address search option if available
+			if ( isset( $settings['search'] ) && $settings['search'] ) {
+				$html .= '<div class="qs-map-field">';
+					$html .= '<label>Search for Address: <input type="text" class="qs-map-search regular-text" /></label>';
+					$html .= '<button type="button" class="button qs-search">Find</button>';
+				$html .= '</div>';
+			}
+
+			// Add the canvas
+			$html .= '<div class="qs-map-canvas"></div>';
+
+			// A button to clear all the map/coordinates
+			$html .= ' <button type="button" class="button qs-clear">Clear</button>';
 		$html .= '</div>';
 
 		return $html;
