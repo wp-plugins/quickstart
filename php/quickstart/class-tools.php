@@ -61,12 +61,12 @@ class Tools {
 				$attr = $value;
 				$value = true;
 			}
-			
+
 			// Make sure it's a registerd attribute (or data- attribute)
 			if ( ! in_array( $attr, $accepted ) && strpos( $attr, 'data-' ) !== 0 ) {
 				continue;
 			}
-			
+
 			if ( 'value' != $attr && is_bool( $value ) ) {
 				// Boolean attributes (e.g. checked, selected)
 				$html .= $value ? " $attr" : '';
@@ -76,7 +76,7 @@ class Tools {
 					// Implode into a space separated list
 					$value = implode( ' ', $value );
 				}
-				
+
 				// Escape the value for attribute use
 				$value = esc_attr( $value );
 
@@ -99,13 +99,21 @@ class Tools {
 	/**
 	 * Load the requested helper files.
 	 *
+	 * @since 1.7.1 Added use of constants to flag which helpers have been loaded.
+	 * @since 1.0.0
+	 *
 	 * @param mixed $helpers A name or array of helper files to load (sans extention).
 	 */
 	public static function load_helpers( $helpers ) {
 		csv_array_ref( $helpers );
 		foreach ( $helpers as $helper ) {
+			$constant = 'QS_LOADED_' . strtoupper( $helper );
+			if ( defined( $constant ) ) {
+				continue;
+			}
 			$file = QS_DIR . "/php/helpers/$helper.php";
 			if ( file_exists( $file ) ){
+				define( $constant, true );
 				require_once( $file );
 			}
 		}
@@ -114,6 +122,8 @@ class Tools {
 	/**
 	 * Actually build a meta_box, either calling the callback or running the build_fields Form method.
 	 *
+	 * @since 1.8.0 Fixed callback checking to check callback, fields AND field values.
+	 *              Also added preprocessing of fields for meta box specific purposes.
 	 * @since 1.6.0 Added use of get_fields option.
 	 * @since 1.4.0 Added use of $source parameter in Form::build_fields().
 	 * @since 1.3.0 Added option of callback key instead of fields for a callback.
@@ -133,12 +143,20 @@ class Tools {
 
 		// Determine the callback or fields argument
 		$callback = $fields = null;
-		if ( isset( $args['callback'] ) ) {
+		if ( isset( $args['callback'] ) && is_callable( $args['callback'] ) ) {
 			$callback = $args['callback'];
-		} elseif ( is_callable( $args['fields'] ) ) {
-			$callback = $args['fields'];
 		} elseif ( isset( $args['fields'] ) ) {
-			$fields = $args['fields'];
+			if ( is_callable( $args['fields'] ) ) {
+				$callback = $args['fields'];
+			} else {
+				$fields = $args['fields'];
+			}
+		} elseif ( isset( $args['field'] ) ) {
+			if ( is_callable( $args['field'] ) ) {
+				$callback = $args['field'];
+			} else {
+				$fields = $args['field'];
+			}
 		} elseif ( isset( $args['get_fields'] ) && is_callable( $args['get_fields'] ) ) {
 			/**
 			 * Dynamically generate the fields array.
@@ -146,8 +164,8 @@ class Tools {
 			 * @since 1.6.0
 			 *
 			 * @param WP_Post $post The post object.
-			 * @param array   $args The original arguments for the metabox.
-			 * @param string  $id   The ID of the metabox.
+			 * @param array   $args The original arguments for the meta box.
+			 * @param string  $id   The ID of the meta box.
 			 */
 			$fields = call_user_func( $args['get_fields'], $post, $args, $id );
 		}
@@ -155,6 +173,52 @@ class Tools {
 		// Wrap in container for any specific targeting needed
 		echo '<div class="qs-meta-box">';
 			if ( $callback ) {
+				/**
+				 * Build the HTML of the meta box.
+				 *
+				 * @since 1.3.0 Use $callback from 'fields' or 'callback' arg.
+				 * @since 1.0.0
+				 *
+				 * @param WP_Post $post The post object.
+				 * @param array   $args The original arguments for the meta box
+				 * @param string  $id   The ID of the meta box.
+				 */
+				call_user_func( $callback, $post, $args, $id );
+			} elseif ( $fields ) {
+				// First, handle any special meta box only processing of the fields
+				foreach ( $fields as $field => &$settings ) {
+					if ( isset( $settings['type'] ) ) {
+						switch ( $settings['type'] ) {
+							case 'editor':
+								// Meta boxes can't have tinyce-enabled editors; they're buggy
+								$settings['tinymce'] = false;
+								break;
+						}
+					}
+				}
+
+				// Now, Build the fields
+				Form::build_fields( $fields, $post, 'post', true );
+			}
+		echo '</div>';
+	}
+
+	/**
+	 * Build a settings fieldset, either calling the callback of running the build_fields Form method.
+	 *
+	 * @since 1.8.0
+	 * @uses Form::build_fields()
+	 *
+	 * @param array $args An arguments list containting the setting name and fields array/callback.
+	 */
+	public static function build_settings_field( $args ) {
+		// Extract $args
+		$setting = $args['setting'];
+		$fields = $args['fields'];
+
+		// Wrap in container for any specific targeting needed
+		echo '<div class="qs-settings-field" id="' . $setting . '-settings-field">';
+			if ( is_callable( $fields ) ) {
 				/**
 				 * Build the HTML of the metabox.
 				 *
@@ -165,10 +229,10 @@ class Tools {
 				 * @param array   $args The original arguments for the metabox
 				 * @param string  $id   The ID of the metabox.
 				 */
-				call_user_func( $callback, $post, $args, $id );
-			} elseif ( isset( $args['fields'] ) ) {
+				call_user_func( $fields );
+			} else {
 				// Build the fields
-				Form::build_fields( $fields, $post, 'post', true );
+				Form::build_fields( $fields, null, 'option', true );
 			}
 		echo '</div>';
 	}
@@ -227,59 +291,115 @@ class Tools {
 	}
 
 	/**
-	 * Add specified callbacks to various hooks ( good for adding a callback to multiple hooks... it could happen.
+	 * Helper function for Tools::enqueue()
 	 *
+	 * @since 1.8.0
+	 *
+	 * @param mixed  $enqueues  The enqueues to handle.
+	 * @param string $function  The function to call.
+	 * @param string $option_var The name of the 5th enqueue argument (css = media, js = in_footer).
+	 */
+	protected static function do_enqueues( $enqueues, $function, $option_var ) {
+		//  Check if its a callback, run it and get the value from that
+		if ( is_callable( $enqueues ) ) {
+			$enqueues = call_user_func( $enqueues );
+		}
+
+		// Run through the enqueues and hand them
+		foreach ( (array) $enqueues as $handle => $args ) {
+			if ( is_numeric( $handle ) ) {
+				// Just enqueue it
+				call_user_func( $function, $args );
+			} else {
+				// Must be registered first
+				$args = (array) $args;
+
+				// Default values of the args
+				$src = $deps = $ver = $option = $$option_var = null;
+
+				// Get values from $args based on format
+				if ( is_assoc( $args ) ) {
+					// If a condition callback was passed, test it and skip if it fails
+					if ( isset( $args['condition'] ) && is_callable( $args['condition'] ) ) {
+						/**
+						 * Test if the current style should be enqueued.
+						 *
+						 * @since 1.8.0
+						 *
+						 * @param array $style The style settings.
+						 *
+						 * @return bool Wether or not to continue enqueuing.
+						 */
+						$result = call_user_func( $args['condition'], $args );
+						if ( ! $result ) continue;
+					}
+
+					extract( $args );
+					$option = $$option_var;
+				} else {
+					list( $src, $deps, $ver, $option ) = fill_array( $args, 4 );
+				}
+
+				// Ensure $deps is an array
+				$deps = (array) $deps;
+
+				// Enqueue it
+				call_user_func( $function, $handle, $src, $deps, $ver, $option );
+			}
+		}
+	}
+
+	/**
+	 * Enqueue styles and scripts.
+	 *
+	 * @since 1.8.0 Moved shared logic to do_enqueues internal method.
+	 *              This also adds conditional style/script support.
 	 * @since 1.0.0
 	 *
 	 * @param array $enqueues Optional An array of the scripts/styles to enqueue, sectioned by type (js/css).
 	 */
-	public static function enqueue( $enqueues = null ) {
+	public static function enqueue( array $enqueues = array() ) {
 		if ( isset( $enqueues['css'] ) ) {
-			//  Check if its a callback, run it and get the value from that
-			if ( is_callable( $enqueues['css'] ) ) {
-				$enqueues['css'] = call_user_func( $enqueues['css'] );
-			}
-			foreach ( (array) $enqueues['css'] as $handle => $style ) {
-				if ( is_numeric( $handle ) ) {
-					// Just enqueue it
-					wp_enqueue_style( $style );
-				} else {
-					// Must be registered first
-					$style = (array) $style;
-					$src = $deps = $ver = $media = null;
-					if ( is_assoc( $style ) ) {
-						extract( $style );
-					} else {
-						list( $src, $deps, $ver, $media ) = fill_array( $style, 4 );
-					}
-					$deps = (array) $deps;
-					wp_enqueue_style( $handle, $src, $deps, $ver, $media );
-				}
-			}
+			static::do_enqueues( $enqueues['css'], 'wp_enqueue_style', 'media' );
 		}
 
 		if ( isset( $enqueues['js'] ) ) {
-			//  Check if its a callback, run it and get the value from that
-			if ( is_callable( $enqueues['js'] ) ) {
-				$enqueues['js'] = call_user_func( $enqueues['js'] );
+			static::do_enqueues( $enqueues['js'], 'wp_enqueue_script', 'in_footer' );
+		}
+	}
+
+	/**
+	 * A shortcut for registering/enqueueing styles and scripts.
+	 *
+	 * This method is simpler but allows for no dependency listing,
+	 * footer placement or other options. You can of course supply
+	 * dependencies by listing their handles before your own files.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @param string       $type  "css" or "js" for what styles/scripts respectively.
+	 * @param string|array $files A path, handle, or array of paths/handles to enqueue.
+	 */
+	public static function quick_enqueue( $type, $files ) {
+		$files = (array) $files;
+
+		// Determin which function to use based on $type
+		$func = 'css' == $type ? 'wp_enqueue_style' : 'wp_enqueue_script';
+
+		// The regex to look for is-file detection
+		$match = 'css' == $type ? '/\.css$/' : '/\.js$/';
+
+		foreach ( $files as $file ) {
+			// If it looks like a file, enqueue with generated $handle and $src
+			if ( preg_match( $match, $file ) ) {
+				$handle = sanitize_title( basename( $file ) );
+				$args = array( $handle, $file );
+			} else {
+				// Assume pre-registered style/script
+				$args = array( $file );
 			}
-			foreach ( (array) $enqueues['js'] as $handle => $script ) {
-				if ( is_numeric( $handle ) ) {
-					// Just enqueue it
-					wp_enqueue_script( $script );
-				} else {
-					// Must be registered first
-					$script = (array) $script;
-					$src = $deps = $ver = $in_footer = null;
-					if ( is_assoc( $script ) ) {
-						extract( $script );
-					} else {
-						list( $src, $deps, $ver, $in_footer ) = fill_array( $script, 4 );
-					}
-					$deps = (array) $deps;
-					wp_enqueue_script( $handle, $src, $deps, $ver, $in_footer );
-				}
-			}
+
+			call_user_func_array( $func, $args );
 		}
 	}
 
@@ -482,7 +602,7 @@ class Tools {
 		foreach ( $objects as $object ) {
 			$method = "hide_$object";
 			if ( method_exists( __CLASS__, $method ) ) {
-				self::$method();
+				static::$method();
 			}
 		}
 	}
