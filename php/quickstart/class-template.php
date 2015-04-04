@@ -11,11 +11,60 @@ namespace QuickStart;
 
 class Template {
 	/**
+	 * Print out the start of the header (doctype and head tag)
+	 *
+	 * This basically merges all the above template functions into one call.
+	 * By default only favicon is called, all others must be registered via $features.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @param array $features An array of features to call.
+	 */
+	public static function the_head( array $features = array() ){
+		// Make sure favicon and title features are set
+		if ( ! isset( $features['title'] ) && ! in_array( 'title', $features ) ) {
+			$features[] = 'title';
+		}
+		if ( ! isset( $features['favicon'] ) && ! in_array( 'favicon', $features ) ) {
+			$features[] = 'favicon';
+		}
+
+		// Begin output
+		static::doc_start();
+		?>
+<head>
+	<meta charset="<?php bloginfo( 'charset' ); ?>">
+	<meta http-equiv="X-UA-Compatible" content="IE=EDGE">
+
+	<?php
+	// Call each feature method
+	foreach ( $features as $method => $settings ) {
+		if ( is_int( $method ) ) {
+			$method = $settings;
+			$settings = null;
+		}
+
+		// Make sure the method exists and that the settings isn't set to FALSE
+		if ( method_exists( get_called_class(), $method ) && $settings !== false ) {
+			call_user_func( array( get_called_class(), $method ), $settings );
+			echo "\n";
+		}
+	}
+	?>
+
+	<?php wp_head(); ?>
+</head>
+		<?php
+		// End output
+	}
+
+	/**
 	 * Print out the start of the document.
 	 *
 	 * Doctype and opening html tag with
 	 * IE conditional comments for classes.
 	 *
+	 * @since 1.9.0 Revised condition for old IE.
 	 * @since 1.1.0 Fixed IE9 tagging.
 	 * @since 1.0.0
 	 */
@@ -33,7 +82,7 @@ class Template {
 <!--[if IE 9]>
 <html id="ie9" class="ie9-" <?php language_attributes(); ?>>
 <![endif]-->
-<!--[if !(IE 6) | !(IE 7) | !(IE 8) | !(IE 9)  ]><!-->
+<!--[if !(lte IE 9) ]><!-->
 <html <?php language_attributes(); ?>>
 <!--<![endif]-->
 <?php
@@ -42,34 +91,47 @@ class Template {
 	/**
 	 * Print out the viewport meta tag.
 	 *
+	 * @since 1.9.0 Added support for passing the content as a string.
 	 * @since 1.8.0
 	 *
-	 * @param array $settings Optional An array of settings to add/overwrite.
+	 * @param array|string $settings Optional An array/string of settings to add/overwrite.
 	 */
 	public static function viewport( $settings = array() ){
-		// Handle the settings to go in the content attribue
-		$settings = wp_parse_args( $settings, array(
-			'width' => 'device-width',
-			'initial-scale' => 1,
-		) );
-
-		$content = array();
-		foreach ( $settings as $key => $value ) {
-			// Skip empty values
-			if ( is_null( $value ) ) {
-				continue;
-			}
-
-			// Add the pair
-			$content[] = "$key=$value";
+		if ( empty( $settings ) ) {
+			$settings = (array) $settings;
 		}
 
-		echo '<meta name="viewport" content="'.implode(',', $content).'">';
+		// Process the $settings if it's an array
+		if ( is_array( $settings ) ) {
+			// Handle the settings to go in the content attribue
+			$settings = wp_parse_args( $settings, array(
+				'width' => 'device-width',
+				'initial-scale' => 1,
+			) );
+
+			$content = array();
+			foreach ( $settings as $key => $value ) {
+				// Skip empty values
+				if ( is_null( $value ) ) {
+					continue;
+				}
+
+				// Add the pair
+				$content[] = "$key=$value";
+			}
+
+			$settings = implode( ',', $content );
+		}
+
+		echo '<meta name="viewport" content="' . $settings . '">';
 	}
 
 	/**
 	 * Print out the title tag.
 	 *
+	 * @since 1.9.0 Restructured to allow passing settings as separate arugments,
+	 *				renamed $seplocation to $side, added detection of passing
+	 *				$side as sole argument, and $filter option.
 	 * @since 1.8.0
 	 *
 	 * @param string|array $settings Optional The wp_title options like separator and location.
@@ -77,29 +139,57 @@ class Template {
 	public static function title( $settings = null ) {
 		global $page, $paged;
 
-		// Default separator & location
 		$sep = '|';
-		$seplocation = 'right';
+		$side = 'right';
+		$filter = true;
 
-		if ( is_string( $settings ) ) {
+		// If multiple arguments were passed, make that $settings
+		if ( func_num_args() > 1 ) {
+			$settings = func_get_args();
+		}
+
+		if ( $settings == 'nofilter' ) {
+			// $settings is just the fitler toggle set to false
+			$filter = false;
+		} elseif ( in_array( $settings, array( 'left', 'right' ) ) ) {
+			// $settings is just the side
+			$side = $settings;
+		} elseif ( is_string( $settings ) ) {
 			// $settings is just the separator
 			$sep = $settings;
 		} elseif ( is_array( $settings ) ) {
-			// $settings is the separater and location...
-			if ( is_assoc( $settings ) ) {
-				// As an associative array, extract
-				extract( $settings );
-			} else {
-				// As a numeric array, list in order
-				list( $sep, $seplocation ) = $settings;
-			}
+			// $settings is multiple options...
+			extract( get_array_values( $settings, 'sep', 'side', 'filter' ) );
+		}
+
+		// Add the custom filter if not disabled
+		if ( $filter ) {
+			add_filter( 'wp_title', array( get_called_class(), 'title_filter' ), 999, 3 );
 		}
 
 		// Get the title and build the output
+		$title = wp_title( $sep, false, $side );
 
-		$title = wp_title( $sep, false, $seplocation );
+		echo '<title>' . $title . '</title>';
+	}
 
-		$title .= get_bloginfo( 'name', 'display' );
+	/**
+	 * Filter the page title. Added via title().
+	 *
+	 * @since 1.9.0
+	 *
+	 * @param string $title The title to filter.
+	 * @param string $sep   The title separator.
+	 * @param string $side  The separator location (left|right)
+	 *
+	 * @return string The filtered title.
+	 */
+	public static function title_filter( $title, $sep, $side ) {
+		if ( $side == 'right' ) {
+			$title = $title . get_bloginfo( 'name', 'display' );
+		} else {
+			$title = get_bloginfo( 'name', 'display' ) . $title;
+		}
 
 		$site_description = get_bloginfo( 'description', 'display' );
 		if ( $site_description && ( is_home() || is_front_page() ) ) {
@@ -110,39 +200,50 @@ class Template {
 			$title .= " $sep " . sprintf( __( 'Page %s' ), max( $paged, $page ) );
 		}
 
-		echo '<title>' . $title . '</title>';
+		return $title;
 	}
 
 	/**
 	 * Print out the favicon link (along with apple icons if passed).
 	 *
+	 * @since 1.9.0 Restructured to allow passing settings as separate arugments.
+	 * 				Also added check for if an icon url is set before printing.
 	 * @since 1.8.0
 	 *
 	 * @param string|array $settings Optional The favicon URL or array of favicons.
 	 */
 	public static function favicon( $settings = null ) {
 		$icon_url = home_url('/favicon.ico');
+		$apple_touch = array();
 		$settings = (array) $settings;
 
-		// Overwrite if needed; either 0th or favicon entry
-		if ( isset( $settings['favicon'] ) ) {
-			$icon_url = $settings['favicon'];
-		} elseif ( isset( $settings[0] ) ) {
-			$icon_url = $settings[0];
+		// If multiple arguments were passed, make that $settings
+		if ( func_num_args() > 1 ) {
+			$settings = func_get_args();
 		}
 
-		// Print the favicon, getting the mimetype from the extension
-		$ext = pathinfo( $icon_url, PATHINFO_EXTENSION );
-		$mimetype = $ext == 'ico' ? 'icon' : $ext;
-		echo '<link rel="shortcut icon" type="image/' . $mimetype . '" href="' . $icon_url . '" />';
-		echo "\n";
+		if ( is_string( $settings ) ) {
+			// $settings is just the separator
+			$icon_url = $settings;
+		} elseif ( is_array( $settings ) ) {
+			// $settings is multiple options...
+			extract( get_array_values( $settings, 'icon_url', 'apple_touch' ) );
+		}
+
+		// Print the favicon if present, getting the mimetype from the extension
+		if ( $icon_url ) {
+			$ext = pathinfo( $icon_url, PATHINFO_EXTENSION );
+			$mimetype = $ext == 'ico' ? 'icon' : $ext;
+			echo '<link rel="shortcut icon" type="image/' . $mimetype . '" href="' . $icon_url . '" />';
+			echo "\n";
+		}
 
 		// Handle apple-touch icons if present
-		if ( isset( $settings['apple-touch'] ) ) {
-			$touch_icons = (array) $settings['apple-touch'];
+		if ( $apple_touch ) {
+			$apple_touch = (array) $apple_touch;
 			$rel = 'apple-touch-icon-precomposed';
 
-			foreach ( $touch_icons as $size => $url ) {
+			foreach ( $apple_touch as $size => $url ) {
 				if ( is_int( $size ) ) {
 					$size = '60x60';
 				}
@@ -159,6 +260,7 @@ class Template {
 	 * Pass a string for the URL (default is css/ie.css in the theme folder)
 	 * Pass an int for the IE version cap (default to 9)
 	 *
+	 * @since 1.9.0 Restructured to allow passing settings as separate arugments.
 	 * @since 1.8.0
 	 *
 	 * @param string|int|array $settings Optional The stylesheet URL and/or version number
@@ -167,21 +269,23 @@ class Template {
 		$version = 9;
 		$css_url = THEME_URL . '/css/ie.css';
 
-		// Handle settings for custom url and/or version
-		if ( is_array( $settings ) ) {
-			if ( isset( $settings['version'] ) ) {
-				$version = $settings['version'];
-			}
-			if ( isset( $settings['src'] ) ) {
-				$css_url = $settings['src'];
-			}
-		} elseif ( is_int( $settings ) ) {
-			$version = $settings;
-		} elseif ( ! empty( $settings ) ) {
-			$css_url = $settings;
+		// If multiple arguments were passed, make that $settings
+		if ( func_num_args() > 1 ) {
+			$settings = func_get_args();
 		}
 
-		echo '<!--[if lt IE ' . $version . ']><link rel="stylesheet" type="text/css" href="' . $css_url . '" /><![endif]-->';
+		if ( is_string( $settings ) ) {
+			// $settings is just the source
+			$css_url = $settings;
+		} elseif ( is_int( $settings ) ) {
+			// $settings is just the version
+			$version = $settings;
+		} elseif ( is_array( $settings ) ) {
+			// $settings is multiple options...
+			extract( get_array_values( $settings, 'css_url', 'version' ) );
+		}
+
+		echo '<!--[if lte IE ' . $version . ']><link rel="stylesheet" type="text/css" href="' . $css_url . '" /><![endif]-->';
 	}
 
 	/**
@@ -195,6 +299,7 @@ class Template {
 		if ( empty( $shiv_url ) ) {
 			$shiv_url = '//html5shiv.googlecode.com/svn/trunk/html5.js';
 		}
+
 		// Print out within an IE conditional comment
 		echo '<!--[if lt IE 9]><script src="' . $shiv_url . '"></script><![endif]-->';
 	}
@@ -218,23 +323,40 @@ class Template {
 	}
 
 	/**
+	 * Print out the theme url for javascript.
+	 *
+	 * @since 1.9.0
+	 */
+	public static function theme_url(){
+		echo '<script>var theme_url = "' . get_bloginfo('theme_url') . '";</script>';
+	}
+
+	/**
 	 * Print out the Google Analytics gode.
 	 *
+	 * @since 1.9.0 Restructured to allow passing settings as separate arugments.
 	 * @since 1.8.0 Added ability to pass $account & $production as array for first argument.
 	 * @since 1.6.2
 	 *
-	 * @param string|array $account    The ID code of the account to track for, or array of $account and $production.
-	 * @param string|array $production Optional A host name or IP address to check for before printing.
-	 * @param bool         $universal  Optional Wether or not to use analytics.js vs ga.js (default TRUE)
+	 *
+	 * @param string|array $settings Optional The account number and/or other options
 	 */
 	public static function ga_code( $account, $production = null, $universal = true ) {
-		// If $account is an array, split it into $account and $production
-		if ( is_array( $account ) ) {
-			if ( is_assoc( $account ) ) {
-				extract( $account );
-			} else {
-				list( $account, $production, $universal ) = fill_array( $account, 3 );
-			}
+		$account = null;
+		$production = null;
+		$universal = true;
+
+		// If multiple arguments were passed, make that $settings
+		if ( func_num_args() > 1 ) {
+			$settings = func_get_args();
+		}
+
+		if ( is_string( $settings ) ) {
+			// $settings is just the account
+			$account = $settings;
+		} elseif ( is_array( $settings ) ) {
+			// $settings is multiple options...
+			extract( get_array_values( $settings, 'account', 'production', 'universal' ) );
 		}
 
 		if ( ! is_null( $production ) ) {
@@ -288,53 +410,5 @@ class Template {
 		</script>
 		<!-- End Google Analytics tracking code -->
 		<?php
-	}
-
-	/**
-	 * Print out the start of the header (doctype and head tag)
-	 *
-	 * This basically merges all the above template functions into one call.
-	 * By default only favicon is called, all others must be registered via $features.
-	 *
-	 * @since 1.8.0
-	 *
-	 * @param array $features An array of features to call.
-	 */
-	public static function the_head( array $features = array() ){
-		// Make sure favicon and title features are set
-		if ( ! isset( $features['title'] ) && ! in_array( 'title', $features ) ) {
-			$features[] = 'title';
-		}
-		if ( ! isset( $features['favicon'] ) && ! in_array( 'favicon', $features ) ) {
-			$features[] = 'favicon';
-		}
-
-		// Begin output
-		static::doc_start();
-		?>
-<head>
-	<meta charset="<?php bloginfo( 'charset' ); ?>">
-	<meta http-equiv="X-UA-Compatible" content="IE=EDGE">
-
-	<?php wp_head(); ?>
-
-	<?php
-	// Call each feature method
-	foreach ( $features as $method => $settings ) {
-		if ( is_int( $method ) ) {
-			$method = $settings;
-			$settings = null;
-		}
-
-		// Make sure the method exists and that the settings isn't set to FALSE
-		if ( method_exists( get_called_class(), $method ) && $settings !== false ) {
-			call_user_func( array( get_called_class(), $method ), $settings );
-			echo "\n";
-		}
-	}
-	?>
-</head>
-		<?php
-		// End output
 	}
 }

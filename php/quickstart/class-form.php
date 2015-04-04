@@ -288,7 +288,7 @@ class Form {
 			$post_terms = get_the_terms( $data->ID, $settings['taxonomy'] );
 			$value = array_map( function( $term ) {
 				return $term->term_id;
-			}, $post_terms );
+			}, (array) $post_terms );
 
 			// Get the available terms for the values list
 			$tax_terms = get_terms( $settings['taxonomy'], 'hide_empty=0' );
@@ -1159,7 +1159,7 @@ class Form {
 
 		// Handle any QuickTags settings if present
 		if ( isset( $settings['quicktags'] ) ) {
-			Hooks::do_quicktags( $settings['quicktags'], $settings['id'] );
+			Tools::do_quicktags( $settings['quicktags'], $settings['id'] );
 
 			// Also format into proper from
 			$settings['quicktags'] = array(
