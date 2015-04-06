@@ -10,6 +10,7 @@
 /**
  * Get the ID or full post object of the index page.
  *
+ * @since 1.9.1 Fixed handling for running on single posts.
  * @since 1.8.0 Added qs_helpers_get_index filter hook.
  * @since 1.6.0
  *
@@ -36,9 +37,12 @@ function get_index( $post_type = null, $return = 'id' ) {
 				$tax = $object->taxonomy;
 				$tax = get_taxonomy( $tax );
 				$post_type = $tax->object_type[0];
+			} elseif ( is_singular() ) {
+				// If single post, use the queried object's post type
+				$post_type = $object->post_type;
 			} else {
-				// Default to post
-				$post_type = get_query_var( 'post_type' );
+				// No idea
+				return null;
 			}
 
 			// Recall this function with the determined post type
@@ -114,6 +118,15 @@ function is_index_page( $post_id = null, $match_post_type = null ) {
 	if ( $post_type != 'page' ) {
 		return false;
 	}
+
+	/**
+	 * Filter the ID of the index page to check.
+	 *
+	 * @since 1.9.1
+	 *
+	 * @param int $post_id The ID of the page determined.
+	 */
+	$post_id = apply_filters( 'qs_helper_is_index_page', $post_id );
 
 	// Reverse lookup the option name that this post's ID is the value of,
 	// provided it's a page_for_ option.
