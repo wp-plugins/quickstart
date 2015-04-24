@@ -24,7 +24,7 @@ QuickStart is an ever expanding utility kit of handy functions, callbacks and to
 **Details on each release can be found [on the GitHub releases page](https://github.com/dougwollison/quickstart/releases) for this project.**
 
 = 1.9.2 =
-Bug fixes; relabel_posts issues, added jquery-ui-sortable dependency for qs-helpers.js, fixed arguments list for Templat::ga_code().
+Bug fixes; relabel_posts issues, added jquery-ui-sortable dependency for qs-helpers.js, fixed arguments list for Template::ga_code().
 
 = 1.9.1 =
 Minor bug fix to get_index(), added qs_helper_is_index_page filter.
