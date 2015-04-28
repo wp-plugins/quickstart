@@ -19,35 +19,49 @@ class Tools extends \Smart_Plugin {
 	 * @access protected
 	 * @var array
 	 */
-	protected static $static_method_hooks = array(
-		'relabel_posts_object'   => array( 'init', 10, 0 ),
-		'relabel_posts_menu'     => array( 'admin_menu', 10, 0 ),
-		'fix_shortcodes'         => array( 'the_content', 10, 1 ),
-		'do_quicktags'           => array( 'admin_print_footer_scripts', 10, 0 ),
-		'disable_quickedit'      => array( 'post_row_actions', 10, 2 ),
-		'frontend_enqueue'       => array( 'wp_enqueue_scripts', 10, 0 ),
-		'backend_enqueue'        => array( 'admin_enqueue_scripts', 10, 0 ),
-		'quick_frontend_enqueue' => array( 'wp_enqueue_scripts', 10, 0 ),
-		'quick_backend_enqueue'  => array( 'admin_enqueue_scripts', 10, 0 ),
-		'post_type_save'         => array( 'save_post', 10, 1 ),
-		'post_type_save_meta'    => array( 'save_post', 10, 1 ),
-		'post_type_count'        => array( 'dashboard_glance_items', 10, 1 ),
-		'edit_meta_box'          => array( 'do_meta_boxes', 10, 2 ),
-		'taxonomy_filter'        => array( 'restrict_manage_posts', 10, 0 ),
-		'print_extra_editor'     => array( 'edit_form_after_editor', 10, 1 ),
-		'add_query_var'          => array( 'query_vars', 10, 1 ),
+	protected static $method_hooks = array(
+		'relabel_posts_object'     => array( 'init', 10, 0 ),
+		'relabel_posts_menu'       => array( 'admin_menu', 10, 0 ),
+		'fix_shortcodes'           => array( 'the_content', 10, 1 ),
+		'do_quicktags'             => array( 'admin_print_footer_scripts', 10, 0 ),
+		'disable_quickedit'        => array( 'post_row_actions', 10, 2 ),
+		'frontend_enqueue'         => array( 'wp_enqueue_scripts', 10, 0 ),
+		'backend_enqueue'          => array( 'admin_enqueue_scripts', 10, 0 ),
+		'quick_frontend_enqueue'   => array( 'wp_enqueue_scripts', 10, 0 ),
+		'quick_backend_enqueue'    => array( 'admin_enqueue_scripts', 10, 0 ),
+		'post_type_save'           => array( 'save_post', 10, 1 ),
+		'post_type_save_meta'      => array( 'save_post', 10, 1 ),
+		'post_type_save_field'     => array( 'save_post', 10, 1 ),
+		'post_type_count'          => array( 'dashboard_glance_items', 10, 1 ),
+		'edit_meta_box'            => array( 'do_meta_boxes', 10, 2 ),
+		'taxonomy_filter'          => array( 'restrict_manage_posts', 10, 0 ),
+		'print_extra_editor'       => array( 'edit_form_after_editor', 10, 1 ),
+		'print_extra_editor_above' => array( 'edit_form_after_title', 10, 1 ),
+		'print_extra_editor_below' => array( 'edit_form_after_editor', 10, 1 ),
+		'add_query_var'            => array( 'query_vars', 10, 1 ),
 	);
+
+	/**
+	 * A list of post table fields that are prefixed with post_
+	 *
+	 * @since 1.10.0
+	 *
+	 * @access public
+	 * @var array
+	 */
+	public static $prefixed_post_fields = array( 'author', 'content_filtered', 'content', 'date_gmt', 'date', 'excerpt', 'mime_type', 'modified_gmt', 'modified', 'name', 'parent', 'password', 'status', 'title', 'type' );
 
 	/**
 	 * A list of accepted attributes for tag building.
 	 *
-	 * @since 1.5.0 Moved from Form to Tools class.
+	 * @since 1.10.0 Removed type from list.
+	 * @since 1.5.0  Moved from Form to Tools class.
 	 * @since 1.0.0
 	 *
 	 * @access public
 	 * @var array
 	 */
-	public static $accepted_attrs = array( 'accesskey', 'autocomplete', 'checked', 'class', 'cols', 'disabled', 'id', 'max', 'maxlength', 'min', 'multiple', 'name', 'placeholder', 'readonly', 'required', 'rows', 'size', 'style', 'tabindex', 'title', 'type', 'value' );
+	public static $accepted_attrs = array( 'accesskey', 'autocomplete', 'checked', 'class', 'cols', 'disabled', 'id', 'max', 'maxlength', 'min', 'multiple', 'name', 'placeholder', 'readonly', 'required', 'rows', 'size', 'style', 'tabindex', 'title', 'value' );
 
 	/**
 	 * A list of tags that should have no content.
@@ -66,6 +80,7 @@ class Tools extends \Smart_Plugin {
 	/**
 	 * Build an HTML tag.
 	 *
+	 * @since 1.10.0 Now adding 'type' to $accepted when doing an INPUT tag.
 	 * @since 1.7.0 Further refined attribute filtering and escaping.
 	 * @since 1.6.2 Added attribute escaping.
 	 * @since 1.6.0 Revised handling of boolean attributes, added $void_elements.
@@ -83,6 +98,11 @@ class Tools extends \Smart_Plugin {
 	public static function build_tag( $tag, $atts, $content = false, $accepted = null ) {
 		if ( is_null( $accepted ) ) {
 			$accepted = static::$accepted_attrs;
+		}
+
+		// Add 'type' to accepted attributes list if INPUT
+		if ( $tag == 'input' ) {
+			$accepted[] = 'type';
 		}
 
 		$html = "<$tag";
@@ -131,15 +151,31 @@ class Tools extends \Smart_Plugin {
 	/**
 	 * Load the requested helper files.
 	 *
-	 * @since 1.7.1 Added use of constants to flag which helpers have been loaded.
+	 * @sicne 1.10.0 Added option to load all helpers, also sanitize helper name.
+	 * @since 1.7.1  Added use of constants to flag which helpers have been loaded.
 	 * @since 1.0.0
 	 *
 	 * @param mixed $helpers A name or array of helper files to load (sans extention).
 	 */
 	public static function load_helpers( $helpers ) {
+		// Check if ALL helpers are requested
+		if ( $helpers == 'all' ) {
+			$helpers = array(
+				'attachment',
+				'family',
+				'index',
+				'media_manager',
+				'post_chunks',
+				'post_field',
+				'post_meta',
+				'teaser',
+				'wpedit',
+			);
+		}
+
 		csv_array_ref( $helpers );
 		foreach ( $helpers as $helper ) {
-			$constant = 'QS_LOADED_' . strtoupper( $helper );
+			$constant = 'QS_LOADED_' . strtoupper( sanitize_title( $helper ) );
 			if ( defined( $constant ) ) {
 				continue;
 			}
@@ -149,6 +185,23 @@ class Tools extends \Smart_Plugin {
 				require_once( $file );
 			}
 		}
+	}
+
+	/**
+	 * Call the appropriate hide_[object] method(s).
+	 *
+	 * @since 1.10.0 Hide methods now separate helpers, reworked handling to match.
+	 * @since 1.0.0
+	 *
+	 * @param mixed $objects An object name, comma separated string, or array of objects to disable.
+	 */
+	public static function hide( $objects ) {
+		csv_array_ref( $objects );
+		$helpers = array();
+		foreach ( $objects as $object ) {
+			$helpers[] = "hide/$object";
+		}
+		static::load_helpers( $helpers );
 	}
 
 	/**
@@ -187,6 +240,24 @@ class Tools extends \Smart_Plugin {
 		wp_update_attachment_metadata( $attachment_id, $attachment_data );
 
 		return $attachment_id;
+	}
+
+	/**
+	 * Check if a post field name needs to be prefixed with post_
+	 *
+	 * @since 1.10.0
+	 *
+	 * @param string $field The name of the field to check/prefix.
+	 *
+	 * @return string The possibly prefixed field.
+	 */
+	public static function maybe_prefix_post_field( $field ) {
+		// Check if the $field doesn't start with post_ but should; prefix if so
+		if ( strpos( $field, 'post_' ) !== 0 && in_array( $field, static::$prefixed_post_fields ) ) {
+			$field = "post_$field";
+		}
+
+		return $field;
 	}
 
 	/**
@@ -234,29 +305,21 @@ class Tools extends \Smart_Plugin {
 	}
 
 	/**
-	 * Actually build a meta_box, either calling the callback or running the build_fields Form method.
+	 * Print the fields via Form or custom callback.
 	 *
-	 * @since 1.8.0 Fixed callback checking to check callback, fields AND field values.
-	 *              Also added preprocessing of fields for meta box specific purposes.
-	 * @since 1.6.0 Added use of get_fields option.
-	 * @since 1.4.0 Added use of $source parameter in Form::build_fields().
-	 * @since 1.3.0 Added option of callback key instead of fields for a callback.
-	 * @since 1.0.0
-	 * @uses Form::build_fields()
+	 * Determines the fields array or callback based on the arguments.
 	 *
-	 * @param object $post The post object to be sent when called via add_meta_box.
-	 * @param array $args The callback args to be sent when called via add_meta_box.
+	 * @since 1.10.0
+	 *
+	 * @param string $context The context (meta_box, setting, etc).
+	 * @param string $field   The name/ID of the field/fieldset.
+	 * @param array  $args    The original arguments used.
+	 * @param mixed  $data    The data to use for the fields.
+	 * @param string $source  The source type of the data.
+	 * @param bool   $wrap    The default $wrap argument for build_fields.
 	 */
-	public static function build_meta_box( $post, $args ) {
-		// Extract $args
-		$id = $args['args']['id'];
-		$args = $args['args']['args'];
-
-		// Print nonce field
-		wp_nonce_field( $id, "_qsnonce-$id" );
-
-		// Determine the callback or fields argument
-		$callback = $fields = null;
+	protected static function do_fields_or_callback( $context, $id, $args, $data, $source, $wrap ) {
+		$fields = $callback = null;
 		if ( isset( $args['callback'] ) && is_callable( $args['callback'] ) ) {
 			$callback = $args['callback'];
 		} elseif ( isset( $args['fields'] ) ) {
@@ -275,51 +338,90 @@ class Tools extends \Smart_Plugin {
 			/**
 			 * Dynamically generate the fields array.
 			 *
-			 * @since 1.6.0
+			 * @since 1.10.0
 			 *
-			 * @param WP_Post $post The post object.
-			 * @param array   $args The original arguments for the meta box.
-			 * @param string  $id   The ID of the meta box.
+			 * @param WP_Post $post   The post object.
+			 * @param array   $args   The original arguments for the meta box.
+			 * @param string  $id     The ID of the meta box.
+			 * @param string  $source The source type for the data.
 			 */
-			$fields = call_user_func( $args['get_fields'], $post, $args, $id );
+			$fields = call_user_func( $args['get_fields'], $data, $args, $id, $source );
+		} elseif ( is_callable( $args ) ) {
+			$callback = $args;
+		} else {
+			$fields = array( $id => $args );
 		}
+
+		if ( $callback ) {
+			/**
+			 * Build the HTML of the metabox.
+			 *
+			 * @since 1.10.0
+			 *
+			 * @param mixed  $data   The data for the fields.
+			 * @param array  $args   The arguments for the fields.
+			 * @param string $id     The id of the field(set).
+			 * @param string $source The source type of the data.
+			 */
+			call_user_func( $callback, $data, $args, $id, $source );
+		} elseif ( $fields ) {
+			// First, handle any special processing of the fields
+			foreach ( $fields as $field => &$settings ) {
+				if ( $context == 'meta_box' && isset( $settings['type'] ) ) {
+					// Special conditions for meta boxes
+					switch ( $settings['type'] ) {
+						case 'editor':
+							// Meta boxes can't have tinyce-enabled editors; they're buggy
+							$settings['tinymce'] = false;
+							break;
+					}
+				}
+			}
+
+			// Build the fields
+			Form::build_fields( $fields, $data, $source, true, $wrap );
+		}
+	}
+
+	/**
+	 * Actually build a meta_box, either calling the callback or running the build_fields Form method.
+	 *
+	 * @since 1.10.0 Moved bulk of logic to do_fields_or_callback().
+	 * @since 1.8.0  Fixed callback checking to check callback, fields AND field values.
+	 *               Also added preprocessing of fields for meta box specific purposes.
+	 * @since 1.6.0  Added use of get_fields option.
+	 * @since 1.4.0  Added use of $source parameter in Form::build_fields().
+	 * @since 1.3.0  Added option of callback key instead of fields for a callback.
+	 * @since 1.0.0
+	 * @uses Form::build_fields()
+	 *
+	 * @param object $post The post object to be sent when called via add_meta_box.
+	 * @param array  $args The settings for the metabox, including callback args.
+	 */
+	public static function build_meta_box( $post, $args ) {
+		// Extract $args depending on structure
+		if ( isset( $args['args'] ) ) {
+			// Passed via add_meta_box callback
+			$id = $args['args']['id'];
+			$args = $args['args']['args'];
+		} else {
+			// Passed manually
+			$id = $args['id'];
+		}
+
+		// Print nonce field
+		wp_nonce_field( $id, "_qsnonce-$id" );
 
 		// Wrap in container for any specific targeting needed
 		echo '<div class="qs-meta-box">';
-			if ( $callback ) {
-				/**
-				 * Build the HTML of the meta box.
-				 *
-				 * @since 1.3.0 Use $callback from 'fields' or 'callback' arg.
-				 * @since 1.0.0
-				 *
-				 * @param WP_Post $post The post object.
-				 * @param array   $args The original arguments for the meta box
-				 * @param string  $id   The ID of the meta box.
-				 */
-				call_user_func( $callback, $post, $args, $id );
-			} elseif ( $fields ) {
-				// First, handle any special meta box only processing of the fields
-				foreach ( $fields as $field => &$settings ) {
-					if ( isset( $settings['type'] ) ) {
-						switch ( $settings['type'] ) {
-							case 'editor':
-								// Meta boxes can't have tinyce-enabled editors; they're buggy
-								$settings['tinymce'] = false;
-								break;
-						}
-					}
-				}
-
-				// Now, Build the fields
-				Form::build_fields( $fields, $post, 'post', true );
-			}
+			static::do_fields_or_callback( 'meta_box', $id, $args, $post, 'post', true );
 		echo '</div>';
 	}
 
 	/**
 	 * Build a settings fieldset, either calling the callback of running the build_fields Form method.
 	 *
+	 * @since 1.10.0 Reworked $args, Moved bulk of logic to do_fields_or_callback().
 	 * @since 1.8.0
 	 * @uses Form::build_fields()
 	 *
@@ -328,32 +430,55 @@ class Tools extends \Smart_Plugin {
 	public static function build_settings_field( $args ) {
 		// Extract $args
 		$setting = $args['setting'];
-		$fields = $args['fields'];
+		$args = $args['args'];
 
 		// Wrap in container for any specific targeting needed
 		echo '<div class="qs-settings-field" id="' . $setting . '-settings-field">';
-			if ( is_callable( $fields ) ) {
-				/**
-				 * Build the HTML of the metabox.
-				 *
-				 * @since 1.3.0 Use $callback from 'fields' or 'callback' arg.
-				 * @since 1.0.0
-				 *
-				 * @param WP_Post $post The post object.
-				 * @param array   $args The original arguments for the metabox
-				 * @param string  $id   The ID of the metabox.
-				 */
-				call_user_func( $fields );
-			} else {
-				// Build the fields
-				Form::build_fields( $fields, null, 'option', true );
-			}
+			static::do_fields_or_callback( 'field_row', $setting, $args, null, 'option', false );
 		echo '</div>';
+	}
+
+	/**
+	 * Build a field row for a form table.
+	 *
+	 * @since 1.10.0
+	 *
+	 * @param string $field  The name/id of the field.
+	 * @param array  $args   The arguments for the field.
+	 * @param array  $data   The data to pass to Form::build_field().
+	 * @param array  $source The source to pass to Form::build_field().
+	 */
+	public static function build_field_row( $field, $args, $data, $source ) {
+		$default_args = array(
+			'id'    => 'qs_field_' . Form::make_id( $field ),
+			'name'  => $field,
+			'title' => Form::make_label( $field ),
+		);
+
+		// Parse the passed args with the defaults
+		$args = wp_parse_args( $args, $default_args );
+
+		echo '<tr class="form-field qs-form-field-row" id="' . $source . '-' . $field . '-wrap">';
+			echo '<th scope="row">';
+				// Print the row title as needed
+				if ( isset( $args['title_not_label'] ) && $args['title_not_label'] ) {
+					// Print just the title
+					echo $args['title'];
+				} else {
+					// Print the title as a label
+					printf( '<label for="%s">%s</label>', $args['id'], $args['title'] );
+				}
+			echo '</th>';
+			echo '<td>';
+				static::do_fields_or_callback( 'field_row', $field, $args, $data, $source, false );
+			echo '</td>';
+		echo '</tr>';
 	}
 
 	/**
 	 * Setup an extra wp_editor for the edit post form.
 	 *
+	 * @since 1.10.0 Added support for post_field and location.
 	 * @since 1.8.0
 	 *
 	 * @param string $name     The name of the field (by default also the meta_key).
@@ -365,10 +490,50 @@ class Tools extends \Smart_Plugin {
 			'meta_key' => $name,
 			'post_type' => 'page',
 			'title' => make_legible( $name ),
+			'location' => 'below',
 		) );
 
-		static::post_type_save_meta( $settings['post_type'], $settings['meta_key'], $settings['name'] );
-		static::print_extra_editor( $settings );
+		// Determine and setup the necessary save hook, based on settings
+		if ( isset( $settings['post_field'] ) ) {
+			static::post_type_save_field( $settings['post_type'], $settings['post_field'], $settings['name'] );
+		} else {
+			static::post_type_save_meta( $settings['post_type'], $settings['meta_key'], $settings['name'] );
+		}
+
+		// Determine and call the necessary method, based on location
+		$method = 'print_extra_editor_' . $settings['location'];
+		static::$method( $settings );
+	}
+
+	/**
+	 * Geocode an address using the Google Geocode JSON API.
+	 *
+	 * @since 1.10.0
+	 *
+	 * @param string $address The address string to geocode.
+	 * @param string $api_key Optional The Google API key to use in the request.
+	 *
+	 * @return array The gecoded address; latitude and longitude.
+	 */
+	public static function geocode_address( $address = null, $api_key = null ) {
+		// Default to the GOOGLE_API_SERVER_KEY constant if defined
+		if ( is_null( $api_key ) && defined( 'GOOGLE_API_SERVER_KEY' ) ) {
+			$api_key = GOOGLE_API_SERVER_KEY;
+		}
+
+		// Build the URL to query
+		$url = 'https://maps.googleapis.com/maps/api/geocode/json?' . http_build_query( array(
+			'address' => str_replace( "\n", ' ', $value ),
+			'key' => $api_key,
+		) );
+
+		// Get the JSON data, and parse, update if successful
+		if ( ( $result = file_get_contents( $url ) )
+		&& ( $result = json_decode( $result, true ) ) ) {
+			return $result['results'][0]['geometry']['location'];
+		}
+
+		return false;
 	}
 
 	// =========================
@@ -588,232 +753,6 @@ class Tools extends \Smart_Plugin {
 	}
 
 	// =========================
-	// !Hide Methods
-	// =========================
-
-	/**
-	 * Call the appropriate hide_[object] method(s).
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param mixed $objects An object name, comma separated string, or array of objects to disable.
-	 */
-	public static function hide( $objects ) {
-		csv_array_ref( $objects );
-		foreach ( $objects as $object ) {
-			$method = "hide_$object";
-			if ( method_exists( __CLASS__, $method ) ) {
-				static::$method();
-			}
-		}
-	}
-
-	/**
-	 * Remove Posts from menus and dashboard.
-	 *
-	 * @since 1.0.0
-	 */
-	public static function hide_posts() {
-		// Remove Posts from admin menu
-		add_action( 'admin_menu', function() {
-			remove_menu_page( 'edit.php' );
-		} );
-
-		// Remove Posts from admin bar
-		add_action( 'admin_bar_menu', function() {
-			global $wp_admin_bar;
-			$wp_admin_bar->remove_menu( 'new-post', 'new-content' );
-		}, 300 );
-
-		// Remove Posts from favorite actions
-		add_filter( 'favorite_actions', function( $actions ) {
-			unset( $actions['edit-posts.php'] );
-			return $actions;
-		} );
-
-		// Remove Recent Posts widget
-		add_action( 'widgets_init', function() {
-			unregister_widget( 'WP_Widget_Recent_Posts' );
-		} );
-	}
-
-	/**
-	 * Remove Pages from menus and dashboard.
-	 *
-	 * @since 1.0.0
-	 */
-	public static function hide_pages() {
-		// Remove Pages from admin menu
-		add_action( 'admin_menu', function() {
-			remove_menu_page( 'edit.php?post_type=page' );
-		} );
-
-		// Remove Pages from admin bar
-		add_action( 'admin_bar_menu', function() {
-			global $wp_admin_bar;
-			$wp_admin_bar->remove_menu( 'new-page', 'new-content' );
-		}, 300 );
-
-		// Remove Pages from favorite actions
-		add_filter( 'favorite_actions', function( $actions ) {
-			unset( $actions['edit-posts.php?post_type=page'] );
-			return $actions;
-		} );
-
-		// Remove Pages widget
-		add_action( 'widgets_init', function() {
-			unregister_widget( 'WP_Widget_Pages' );
-		} );
-	}
-
-	/**
-	 * Remove Comments from menus, dashboard, editor, etc.
-	 *
-	 * @since 1.0.0
-	 */
-	public static function hide_comments() {
-		// Remove Comment support from all post_types with it
-		add_action( 'init', function() {
-			foreach ( get_post_types( array( 'public' => true, '_builtin' => true ) ) as $post_type ) {
-				if ( post_type_supports( $post_type, 'comments' ) ) {
-					remove_post_type_support( $post_type, 'comments' );
-				}
-			}
-		} );
-
-		// Remove edit comments and discussion options from admin menu
-		add_action( 'admin_menu', function() {
-			remove_menu_page( 'edit-comments.php' );
-			remove_submenu_page( 'options-general.php', 'options-discussion.php' );
-		} );
-
-		// Remove Comments from admin bar
-		add_action( 'admin_bar_menu', function() {
-			global $wp_admin_bar;
-			$wp_admin_bar->remove_menu( 'comments' );
-		}, 300 );
-
-		// Remove Comments meta box from dashboard
-		add_action( 'wp_dashboard_setup', function() {
-			remove_meta_box( 'dashboard_recent_comments', 'dashboard', 'normal' );
-		} );
-
-		// Remove Comments/Trackback meta boxes from post editor
-		add_action( 'admin_init', function() {
-			remove_meta_box( 'trackbacksdiv',    'post', 'normal' );
-			remove_meta_box( 'commentstatusdiv', 'post', 'normal' );
-			remove_meta_box( 'commentsdiv',      'post', 'normal' );
-			remove_meta_box( 'trackbacksdiv',    'page', 'normal' );
-			remove_meta_box( 'commentstatusdiv', 'page', 'normal' );
-			remove_meta_box( 'commentsdiv',      'page', 'normal' );
-		} );
-
-		// Remove Comments column from Posts/Pages editor
-		$removeCommentsColumn = function( $defaults ) {
-			unset( $defaults["comments"] );
-			return $defaults;
-		};
-		add_filter( 'manage_posts_columns', $removeCommentsColumn );
-		add_filter( 'manage_pages_columns', $removeCommentsColumn );
-
-		// Remove Recent Comments widget
-		add_action( 'widgets_init', function() {
-			unregister_widget( 'WP_Widget_Recent_Comments' );
-		} );
-
-		// Remove Comments from favorite actions
-		add_filter( 'favorite_actions', function( $actions ) {
-			unset( $actions['edit-comments.php'] );
-			return $actions;
-		} );
-
-		// Make comments number always return 0
-		add_action( 'get_comments_number', function() {
-			return 0;
-		} );
-
-		// Edit $wp_query to clear comment related data
-		add_action( 'comments_template', function() {
-			global $wp_query;
-			$wp_query->comments = array();
-			$wp_query->comments_by_type = array();
-			$wp_query->comment_count = 0;
-			$wp_query->post->comment_count = 0;
-			$wp_query->post->comment_status = 'closed';
-			$wp_query->queried_object->comment_count = 0;
-			$wp_query->queried_object->comment_status = 'closed';
-		} );
-	}
-
-	/**
-	 * Remove Links from menus and dashboard.
-	 *
-	 * @since 1.0.0
-	 */
-	public static function hide_links() {
-		// Remove Links from admin menu
-		add_action( 'admin_menu', function() {
-			remove_menu_page( 'link-manager.php' );
-		} );
-
-		// Remove Links from admin bar
-		add_action( 'admin_bar_menu', function() {
-			global $wp_admin_bar;
-			$wp_admin_bar->remove_menu( 'new-link', 'new-content' );
-		}, 300 );
-
-		// Remove Links from favorite actions
-		add_filter( 'favorite_actions', function( $actions ) {
-			unset( $actions['link-add.php'] );
-			return $actions;
-		} );
-
-		// Remove Links widget
-		add_action( 'widgets_init', function() {
-			unregister_widget( 'WP_Widget_Links' );
-		} );
-	}
-
-	/**
-	 * Remove the wp_head garbage.
-	 *
-	 * @since 1.0.0
-	 */
-	public static function hide_wp_head() {
-		// links for adjacent posts
-		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
-		// category feeds
-		remove_action( 'wp_head', 'feed_links_extra', 3 );
-		// post and comment feeds
-		remove_action( 'wp_head', 'feed_links', 2 );
-		// index link
-		remove_action( 'wp_head', 'index_rel_link' );
-		// previous link
-		remove_action( 'wp_head', 'parent_post_rel_link', 10, 0 );
-		remove_action( 'wp_head', 'rel_canonical', 10, 1 );
-		// EditURI link
-		remove_action( 'wp_head', 'rsd_link' );
-		// start link
-		remove_action( 'wp_head', 'start_post_rel_link', 10, 0 );
-		// windows live writer
-		remove_action( 'wp_head', 'wlwmanifest_link' );
-		// WP version
-		remove_action( 'wp_head', 'wp_generator' );
-		// links for adjacent posts
-		remove_action( 'wp_head', 'wp_shortlink_wp_head', 10, 0 );
-
-		// remove WP version from css/js
-		$remove_ver = function( $src ) {
-			if ( strpos( $src, 'ver=' ) ) {
-				$src = remove_query_arg( 'ver', $src );
-			}
-			return $src;
-		};
-		add_filter( 'style_loader_src', $remove_ver, 9999 );
-		add_filter( 'script_loader_src', $remove_ver, 9999 );
-	}
-
-	// =========================
 	// !Self-Hooking Tools
 	// =========================
 
@@ -888,7 +827,7 @@ class Tools extends \Smart_Plugin {
 	 */
 	protected static function _relabel_posts_menu( $singular, $plural, $menuname ) {
 		global $menu, $submenu;
-		
+
 		$menu[5][0] = $menuname;
 		str_replace_in_array(
 			array( __( 'Posts' ), __( 'Post' ) ),
@@ -1078,6 +1017,38 @@ class Tools extends \Smart_Plugin {
 	}
 
 	/**
+	 * Save a specific post field for a specific post_type.
+	 *
+	 * Saves desired field after running static::save_post_check().
+	 *
+	 * @since 1.10.0
+	 *
+	 * @param int    $post_id    The ID of the post being saved (skip when saving).
+	 * @param string $post_type  The post_type to limit this call to.
+	 * @param string $post_field The field in the posts table to save the value to.
+	 * @param string $field_name Optional The name of the $_POST field to use (defaults to $post_field).
+	 */
+	protected static function _post_type_save_field( $post_id, $post_type, $post_field, $field_name = null ) {
+		if ( ! static::save_post_check( $post_id, $post_type ) ) return;
+		global $wpdb;
+
+		if ( is_null( $field_name ) ) {
+			$field_name = $post_field;
+		}
+
+		// Auto prefix if needed
+		$post_field = static::maybe_prefix_post_field( $post_field );
+
+		$value = $_POST[ $field_name ];
+
+		$wpdb->update( $wpdb->posts, array(
+			$post_field => $value,
+		), array(
+			'ID' => $post_id,
+		) );
+	}
+
+	/**
 	 * Add counts for a post type to the Right Now widget on the dashboard.
 	 *
 	 * @since 1.3.1 Revised logic to work with the new dashboard_right_now markup.
@@ -1226,6 +1197,7 @@ class Tools extends \Smart_Plugin {
 	/**
 	 * Print an extra wp_editor to the edit post form.
 	 *
+	 * @since 1.10.0 Fixed class & id of wrapper.
 	 * @since 1.8.0
 	 *
 	 * @see Tools::add_extra_editor()
@@ -1240,12 +1212,40 @@ class Tools extends \Smart_Plugin {
 		}
 
 		// Get the value
-		$value = get_post_meta( $post->ID, $settings['meta_key'], true );
+		if ( isset( $settings['post_field'] ) ) {
+			// Auto prefix if needed
+			$field = static::maybe_prefix_post_field( $settings['post_field'] );
+			$value = $post->{$field};
+		} elseif ( isset( $settings['meta_key'] ) ) {
+			$value = get_post_meta( $post->ID, $settings['meta_key'], true );
+		}
 
-		printf( '<div class="qs-editor" id="%s-editor">', $name );
+		printf( '<div class="qs-editor-wrap" id="%s-editor-wrap">', $settings['name'] );
 			echo '<h3>' . $settings['title'] . '</h3>';
 			echo Form::build_editor( $settings, $value );
 		echo '</div>';
+	}
+
+	/**
+	 * Alias of print_extra_editor() but fires before the main editor.
+	 *
+	 * @since 1.10.0
+	 *
+	 * @see Tools::print_extra_editor()
+	 */
+	public static function _print_extra_editor_above( $post, $settings = array() ) {
+		static::_print_extra_editor( $post, $settings );
+	}
+
+	/**
+	 * Alias of print_extra_editor() but fires after the main editor.
+	 *
+	 * @since 1.10.0
+	 *
+	 * @see Tools::print_extra_editor()
+	 */
+	public static function _print_extra_editor_below( $post, $settings = array() ) {
+		static::_print_extra_editor( $post, $settings );
 	}
 
 	/**

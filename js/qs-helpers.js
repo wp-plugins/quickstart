@@ -58,7 +58,7 @@ window.QS = window.QS || {};
 	});
 })( jQuery );
 
-jQuery(function($){
+jQuery(function( $ ) {
 	function randStr() {
 		return Math.round(Math.random() * 100000000).toString(36);
 	}
@@ -91,8 +91,8 @@ jQuery(function($){
 				var $preview = $parent.find( '.qs-preview' );
 				$preview.html( $preview.attr( 'title' ) );
 				$parent.find( '.qs-value' ).val( '' );
-				// And hide this button
-				$( this ).hide();
+				// And update the parent's value-* class
+				$parent.removeClass( 'value-filled' ).addClass( 'value-empty' );
 			} else if ( $parent.hasClass( 'gallery' ) ) {
 				// Empty the gallery preview and input value
 				$parent.find( '.qs-preview' ).animate({
@@ -141,8 +141,10 @@ jQuery(function($){
 	// Repeater setup
 	$( '.qs-repeater' ).each(function() {
 		var $repeater = $( this );
-		var $container = $repeater.find( '.qs-container' );
-		var $template = $repeater.find( '.qs-template' );
+
+		// Get the container and template (make sure to grab closest decendants)
+		var $container = $repeater.find( '.qs-container' ).eq(0);
+		var $template = $repeater.find( '.qs-template' ).eq(0);
 
 		if ( $template.length === 0 ) {
 			return;
