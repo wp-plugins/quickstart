@@ -19,9 +19,9 @@ window.QS = window.QS || {};
 	 */
 	function ucwords( str ) {
 		return ( str + '' )
-	    .replace( /^([a-z\u00E0-\u00FC])|\s+([a-z\u00E0-\u00FC])/g, function( $1 ) {
-	    	return $1.toUpperCase();
-	    });
+		.replace( /^([a-z\u00E0-\u00FC])|\s+([a-z\u00E0-\u00FC])/g, function( $1 ) {
+			return $1.toUpperCase();
+		});
 	}
 
 	/**
@@ -54,7 +54,7 @@ window.QS = window.QS || {};
 		 *
 		 * @since 1.0.0
 		 *
-		 * @param  wp.media frame The frame workflow.
+		 * @param wp.media frame The frame workflow.
 		 *
 		 * @return object The first attachment selected.
 		 */
@@ -184,7 +184,6 @@ window.QS = window.QS || {};
 					ids = [ ids ];
 				}
 
-				var id;
 				_.each( ids, function( id ) {
 					attachment = wp.media.attachment( id );
 					attachment.fetch();
@@ -308,6 +307,7 @@ window.QS = window.QS || {};
 	 *
 	 * Replaces addFile, editGallery, and setImage.
 	 *
+	 * @since 1.10.0 Now uses value-(filled|empty) classes.
 	 * @since 1.8.0
 	 *
 	 * @param Event  event The (click) event that triggered this.
@@ -385,7 +385,7 @@ window.QS = window.QS || {};
 							var attachments = media.attachments();
 
 							// Loop vars
-							var items = [], img;
+							var items = [];
 
 							// Empty the preview box
 							plugin.$preview.empty();
@@ -397,24 +397,24 @@ window.QS = window.QS || {};
 
 								var src = '';
 								// Use thumbnail or full size if unavailable
-								if ( null != attachment.sizes.thumbnail ) {
+								if ( typeof attachment.sizes.thumbnail !== 'undefined' ) {
 									src = attachment.sizes.thumbnail.url;
 								} else {
 									src = attachment.sizes.full.url;
 								}
 
 								// Create a new image with the thumbnail URL
-								img = $( '<img src="' + src + '">' );
+								var $img = $( '<img src="' + src + '">' );
 
 								// Add the new image to the preview
-								plugin.$preview.append( img );
+								plugin.$preview.append( $img );
 							});
 
 							// Update the input with the id list
 							plugin.$input.val( items.join( ',' ) );
- 
-                            // Show the clear button
-                            plugin.$elm.find( '.qs-clear' ).show();
+
+							// Ensure the empty class is removed and the filled class added
+							plugin.$elm.removeClass( 'value-empty' ).addClass( 'value-filled' );
 						}
 					}
 				});
@@ -450,18 +450,18 @@ window.QS = window.QS || {};
 
 							// Update preview if singular
 							if ( ! is_multi ) {
-								var attachment = attachments[0];
+								var attachment = attachments[0], img;
 								img = document.createElement( 'img' );
 
 								// Clear the preview
 								plugin.$preview.empty();
 
 								if ( attachment.type == 'image' ) {
-									// Attachment is an image, set the img.src to thumbnail...
-									if ( null != attachment.sizes.medium ) {
+									// Attachment is an image, set the img.src to medium size...
+									if ( typeof attachment.sizes.medium !== 'undefined'  ) {
 										img.src = attachment.sizes.medium.url;
 									} else {
-										// ...Or full size if no thumbnail is set
+										// ...Or full size if no medium version is set
 										img.src = attachment.sizes.full.url;
 									}
 								} else {
@@ -469,15 +469,16 @@ window.QS = window.QS || {};
 									img.src = attachment.icon;
 								}
 
-								// Update the preivew, input value, and show the clear button
+								// Update the preivew, input value
 								plugin.$preview.append( img );
 								plugin.$input.val( attachment.id );
 
-								plugin.$elm.find( '.qs-clear' ).show();
+								// Ensure the empty class is removed and the filled class added
+								plugin.$elm.removeClass( 'value-empty' ).addClass( 'value-filled' );
 							} else {
 								// Loop through attachments and add them to the preview
-								var $item, $preview, $input, img, text;
-								_.each( attachments, function( attachment, i ) {
+								var $item, $preview, $input;
+								_.each( attachments, function( attachment ) {
 									// Make a copty of the template item
 									$item = plugin.$template.clone();
 
@@ -489,7 +490,7 @@ window.QS = window.QS || {};
 									if ( $preview.is( 'img' ) && 'image' === attachment.type ) {
 										// Preview is an image, update the source
 										// Use thumbnail or full size if unavailable
-										if ( null != attachment.sizes.thumbnail ) {
+										if ( typeof attachment.sizes.thumbnail !== 'undefined' ) {
 											$preview.attr( 'src', attachment.sizes.thumbnail.url );
 										} else {
 											$preview.attr( 'src', attachment.sizes.full.url );
@@ -518,8 +519,8 @@ window.QS = window.QS || {};
 									// Store the ID in the input field
 									$input.val( attachment.id );
 
-									// Add the item to the container
-									plugin.$container.append( $item );
+									// Add the item to the container, ensure it has the filled and not empty class
+									plugin.$container.append( $item ).removeClass( 'value-empty' ).addClass( 'value-filled' );
 
 									// Trigger the media-added event
 									$item.trigger( 'qs:media-added' );
@@ -559,13 +560,8 @@ window.QS = window.QS || {};
 				plugin.gallery = plugin.$input.val();
 			}
 
-			// If in single mode and no value is set, hide the clear button
-			if ( ! is_multi && plugin.$input.val() === '' ) {
-				plugin.$elm.find( '.qs-clear' ).hide();
-			}
-
 			// Call appropriate setup function
-			func = is_gallery ? 'gallery' : 'insert';
+			var func = is_gallery ? 'gallery' : 'insert';
 			plugin.frame = media[ func ]( plugin, true );
 
 			// Store the plugin options for later use
@@ -582,7 +578,7 @@ window.QS = window.QS || {};
 
 		// Now, open the frame
 		plugin.frame.open();
-	}
+	};
 
 	/**
 	 * Setup file adder functionality.
@@ -598,9 +594,7 @@ window.QS = window.QS || {};
 	 * @param Event event The click event that triggered this.
 	 * @param string mode  Pass 'initonly' to setup but not open the frame.
 	 */
-	QS.addFile = function( event, mode ) {
-		var $elm = $( this );
-
+	QS.addFile = function() {
 		// Alias to the addFile method
 		return QS.setupMedia.apply( this, arguments );
 	};
@@ -617,7 +611,7 @@ window.QS = window.QS || {};
 	 * @param Event event The click event that triggered this.
 	 * @param string mode  Pass 'initonly' to setup but not open the frame.
 	 */
-	QS.editGallery = function( event, mode ) {
+	QS.editGallery = function() {
 		var $elm = $( this );
 
 		// Ensure the type is set to image
@@ -639,7 +633,7 @@ window.QS = window.QS || {};
 	 *
 	 * @param Event event The click event that triggered this.
 	 */
-	QS.setImage = function( event ) {
+	QS.setImage = function() {
 		var $elm = $( this );
 
 		// Ensure the type is set to image
