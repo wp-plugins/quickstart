@@ -58,6 +58,7 @@ class Setup extends \Smart_Plugin {
 		'order_manager_save'     => array( 'admin_init', 10, 0 ),
 		'index_page_settings'    => array( 'init', 10, 0 ),
 		'index_page_post_states' => array( 'display_post_states', 10, 2 ),
+		'index_page_request'     => array( 'parse_request', 0, 1 ),
 		'index_page_query'       => array( 'parse_query', 0, 1 ),
 		'index_page_link'        => array( 'post_type_archive_link', 10, 2 ),
 		'index_page_title_part'  => array( 'wp_title_parts', 10, 1 ),
@@ -352,6 +353,7 @@ class Setup extends \Smart_Plugin {
 						unset( $pt_args['taxonomies'][ $taxonomy ] );
 					}
 				}
+				unset( $pt_args['taxonomies'] );
 			}
 
 			// Check for meta boxes to register for the post type
@@ -381,6 +383,7 @@ class Setup extends \Smart_Plugin {
 					//and remove from this post type
 					unset( $pt_args['meta_boxes'][ $meta_box ] );
 				}
+				unset( $pt_args['meta_boxes'] );
 			}
 
 			// Check for pages to register under this post type
@@ -399,6 +402,7 @@ class Setup extends \Smart_Plugin {
 					//and remove from this post type
 					unset( $pt_args['pages'][ $page ] );
 				}
+				unset( $pt_args['pages'] );
 			}
 
 			// Check for features to register for the post type
@@ -419,12 +423,14 @@ class Setup extends \Smart_Plugin {
 					//and remove from this post type
 					unset( $pt_args['features'][ $feature ] );
 				}
+				unset( $pt_args['features'] );
 			}
 
 			// Check for columns to register for the post type
 			if ( isset( $pt_args['columns'] ) ) {
 				// Add this column for this post type to the columns section of $config
 				$configs['columns'][ $post_type ] = $pt_args['columns'];
+				unset( $pt_args['columns'] );
 			}
 		}
 
@@ -449,9 +455,10 @@ class Setup extends \Smart_Plugin {
 	/**
 	 * Register the requested post_type.
 	 *
-	 * @since 1.9.0 Now protected.
-	 * @since 1.6.0 Modified handling of save_post callback to Tools::post_type_save().
-	 * @since 1.2.0 Added use of save argument for general save_post callback.
+	 * @since 1.10.1 Added day/month/year rewrites to post types with has_archive support.
+	 * @since 1.9.0  Now protected.
+	 * @since 1.6.0  Modified handling of save_post callback to Tools::post_type_save().
+	 * @since 1.2.0  Added use of save argument for general save_post callback.
 	 * @since 1.0.0
 	 *
 	 * @param string $post_type The slug of the post type to register.
@@ -487,12 +494,37 @@ class Setup extends \Smart_Plugin {
 		// If a save hook is passed, register it
 		if ( isset( $args['save'] ) ) {
 			Tools::post_type_save( $post_type, $args['save'] );
+			unset( $args['save'] );
 		}
 
-		// Now that it's registered, fetch the resulting show_in_menu argument,
+		// Get the registered post type
+		$post_type_obj = get_post_type_object( $post_type );
+
+		// Check the show_in_menu argument,
 		// and add the post_type_count hook if true
-		if ( get_post_type_object( $post_type )->show_in_menu ) {
+		if ( $post_type_obj->show_in_menu ) {
 			Tools::post_type_count( $post_type );
+		}
+
+		// Check the has_archive argument,
+		// setup day/month/year archive rewrites if true
+		if ( $post_type_obj->has_archive ) {
+			$slug = $post_type_obj->rewrite['slug'];
+
+			// Add the custom rewrites
+			Tools::add_rewrites( array(
+				// Add day archive (and pagination)
+				$slug . '/([0-9]{4})/([0-9]{2})/([0-9]{2})/page/?([0-9]+)/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]&monthnum=$matches[2]&day=$matches[3]&paged=$matches[4]',
+				$slug . '/([0-9]{4})/([0-9]{2})/([0-9]{2})/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]&monthnum=$matches[2]&day=$matches[3]',
+
+				// Add month archive (and pagination)
+				$slug . '/([0-9]{4})/([0-9]{2})/page/?([0-9]+)/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]&monthnum=$matches[2]&paged=$matches[3]',
+				$slug . '/([0-9]{4})/([0-9]{2})/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]&monthnum=$matches[2]',
+
+				// Add year archive (and pagination)
+				$slug . '/([0-9]{4})/page/?([0-9]+)/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]&paged=$matches[2]',
+				$slug . '/([0-9]{4})/?' => 'index.php?post_type=' . $post_type . '&year=$matches[1]',
+			) );
 		}
 	}
 
@@ -520,11 +552,12 @@ class Setup extends \Smart_Plugin {
 	/**
 	 * Register the requested taxonomy.
 	 *
-	 * @since 1.9.0 Now protected.
-	 * @since 1.8.0 Added enforcement of array for for post_type value.
-	 * @since 1.6.0 Updated static replacement meta box title based on $multiple.
-	 * @since 1.5.0 Added "static" option handling (custom taxonomy meta box).
-	 * @since 1.3.1 Removed Tools::taxonomy_count call.
+	 * @since 1.10.1 Prevent non-taxonomy args from being passed to register_taxonomy.
+	 * @since 1.9.0  Now protected.
+	 * @since 1.8.0  Added enforcement of array for for post_type value.
+	 * @since 1.6.0  Updated static replacement meta box title based on $multiple.
+	 * @since 1.5.0  Added "static" option handling (custom taxonomy meta box).
+	 * @since 1.3.1  Removed Tools::taxonomy_count call.
 	 * @since 1.0.0
 	 *
 	 * @param string $taxonomy The slug of the taxonomy to register.
@@ -534,6 +567,26 @@ class Setup extends \Smart_Plugin {
 		// Ensure post_type is in array form if set.
 		if ( isset( $args['post_type'] ) ) {
 			csv_array_ref( $args['post_type'] );
+		}
+
+		// Get the post_type, preload, meta_fields, and meta_box_term_query arguments,
+		// And remove them so they aren't saved to the taxonomy
+		$post_type = $preload = $meta_fields = $meta_box_term_query = array();
+		if ( isset( $args['post_type'] ) ) {
+			$post_type = csv_array( $args['post_type'] );
+			unset( $args['post_type'] );
+		}
+		if ( isset( $args['preload'] ) ) {
+			$preload = $args['preload'];
+			unset( $args['preload'] );
+		}
+		if ( isset( $args['meta_fields'] ) ) {
+			$meta_fields = $args['meta_fields'];
+			unset( $args['meta_fields'] );
+		}
+		if ( isset( $args['meta_box_term_query'] ) ) {
+			$meta_box_term_query = $args['meta_box_term_query'];
+			unset( $args['meta_box_term_query'] );
 		}
 
 		// Register the taxonomy if it doesn't exist
@@ -580,7 +633,7 @@ class Setup extends \Smart_Plugin {
 			}
 
 			// Now, register the post type
-			register_taxonomy( $taxonomy, $args['post_type'], $args );
+			register_taxonomy( $taxonomy, $post_type, $args );
 
 			// Proceed with post-registration stuff, provided it was successfully registered.
 			if ( ! ( $taxonomy_obj = get_taxonomy( $taxonomy ) ) ) {
@@ -608,8 +661,8 @@ class Setup extends \Smart_Plugin {
 				);
 
 				// Add term_query if metabox_term_query arg is set
-				if ( isset( $args['meta_box_term_query'] ) ) {
-					$meta_box_args['term_query'] = $args['meta_box_term_query'];
+				if ( $meta_box_term_query ) {
+					$meta_box_args['term_query'] = $meta_box_term_query;
 				}
 
 				$this->register_meta_box( "$taxonomy-terms", $meta_box_args );
@@ -624,10 +677,10 @@ class Setup extends \Smart_Plugin {
 		}
 
 		// Now that it's registered, see if there are preloaded terms to add
-		if ( isset( $args['preload'] ) && is_array( $args['preload'] ) ) {
-			$is_assoc = is_assoc( $args['preload'] );
+		if ( $preload && is_array( $preload ) ) {
+			$is_assoc = is_assoc( $preload );
 
-			foreach ( $args['preload'] as $term => $t_args ) {
+			foreach ( $preload as $term => $t_args ) {
 				// Check if the term was added numerically on it's own
 				if ( ! $is_assoc ) {
 					$term = $t_args;
@@ -652,11 +705,8 @@ class Setup extends \Smart_Plugin {
 		}
 
 		// Check if any meta fields were defined, set them up if so
-		if ( isset( $args['meta_fields'] ) ) {
-			$fields = $args['meta_fields'];
-
-			$this->setup_callback( 'build_term_meta_fields', array( $fields ), array( "{$taxonomy}_edit_form_fields", 10, 1 ) );
-			$this->setup_callback( 'save_term_meta_fields', array( $fields ), array( "edited_{$taxonomy}", 10, 1 ) );
+		if ( $meta_fields ) {
+			$this->setup_termmeta( $meta_fields, $taxonomy );
 		}
 	}
 
@@ -680,6 +730,24 @@ class Setup extends \Smart_Plugin {
 	// =========================
 	// !-- Term Meta Field Setups
 	// =========================
+
+	/**
+	 * Setup the hooks for adding/saving user meta fields.
+	 *
+	 * @since 1.10.1
+	 *
+	 * @param array  $fields   The fields to build/save.
+	 * @param string $taxonomy The taxonomy to hook into.
+	 */
+	protected function setup_termmeta( $fields, $taxonomy ) {
+		// Do nothing if not in the admin
+		if ( is_frontend() ) {
+			return;
+		}
+
+		$this->setup_callback( 'build_term_meta_fields', array( $fields ), array( "{$taxonomy}_edit_form_fields", 10, 1 ) );
+		$this->setup_callback( 'save_term_meta_fields', array( $fields ), array( "edited_{$taxonomy}", 10, 1 ) );
+	}
 
 	/**
 	 * Build and print out a term meta field row.
@@ -1747,7 +1815,7 @@ class Setup extends \Smart_Plugin {
 	 */
 	protected function setup_usermeta( $fields ) {
 		// Do nothing if not in the admin
-		if ( ! is_admin() ) {
+		if ( is_frontend() ) {
 			return;
 		}
 
@@ -1931,7 +1999,7 @@ class Setup extends \Smart_Plugin {
 		}
 
 		// Don't proceed with hooks if not on the admin side.
-		if ( ! is_admin() ) {
+		if ( is_frontend() ) {
 			return;
 		}
 
@@ -2038,9 +2106,11 @@ class Setup extends \Smart_Plugin {
 	/**
 	 * Setup index page setting/hook for certain post types.
 	 *
-	 * @since 1.9.0 Now protected, dropped $index_pages array creation.
-	 * @since 1.8.0 Restructured to use a hooks once for all post_types,
-	 *				Also allowed passing of just the post_type list instead of args.
+	 * @since 1.10.1 Split index_page_query into index_page_request/query,
+	 *               Added setup of rewrite rules for day/month/year archives.
+	 * @since 1.9.0  Now protected, dropped $index_pages array creation.
+	 * @since 1.8.0  Restructured to use a hooks once for all post_types,
+	 *				 Also allowed passing of just the post_type list instead of args.
 	 * @since 1.6.0
 	 *
 	 * @param array $args A list of options for the custom indexes.
@@ -2061,22 +2131,35 @@ class Setup extends \Smart_Plugin {
 		// Make sure the index helper is loaded
 		Tools::load_helpers( 'index' );
 
-		// Setup settings or hooks depending on where we are
+		// Setup appropriate hooks depending on where we are
 		if ( is_admin() ) {
 			// Register the settings and post states
 			$this->index_page_settings( $post_types );
 			$this->index_page_post_states( $post_types );
-		} else {
-			// Add the query/title/link hooks on the frontend
-			$this->index_page_query( $post_types );
+		}
+		if ( is_frontend() ) {
+			// Add the request/query/title/link hooks on the frontend
+			$this->index_page_request( $post_types );
+			$this->index_page_query();
 			$this->index_page_title_part();
 			$this->index_page_link();
 		}
+
+		// Add day/month/year rewrites so they'll work with the index page slugs
+		Tools::add_rewrites( array(
+			'([^/]+)/([0-9]{4})/([0-9]{2})/([0-9]{2})/page/?([0-9]+)/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]&monthnum=$matches[3]&day=$matches[4]&paged=$matches[5]',
+			'([^/]+)/([0-9]{4})/([0-9]{2})/([0-9]{2})/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]&monthnum=$matches[3]&day=$matches[4]',
+			'([^/]+)/([0-9]{4})/([0-9]{2})/page/?([0-9]+)/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]&monthnum=$matches[3]&paged=$matches[4]',
+			'([^/]+)/([0-9]{4})/([0-9]{2})/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]&monthnum=$matches[3]',
+			'([^/]+)/([0-9]{4})/page/?([0-9]+)/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]&paged=$matches[3]',
+			'([^/]+)/([0-9]{4})/?' =>  'index.php?pagename=$matches[1]&year=$matches[2]',
+		) );
 	}
 
 	/**
 	 * Register the index page settings for the post types.
 	 *
+	 * @since 1.10.1 Added check for has_archive support.
 	 * @since 1.9.0
 	 *
 	 * @param array $post_types The list of post types.
@@ -2084,8 +2167,8 @@ class Setup extends \Smart_Plugin {
 	protected function _index_page_settings( $post_types ) {
 		// Register a setting for each post type
 		foreach ( $post_types as $post_type ) {
-			// Make sure the post type is registered
-			if ( ! post_type_exists( $post_type ) ) {
+			// Make sure the post type is registered and supports archives
+			if ( ! post_type_exists( $post_type ) || ! get_post_type_object( $post_type )->has_archive ) {
 				continue;
 			}
 
@@ -2140,16 +2223,15 @@ class Setup extends \Smart_Plugin {
 	/**
 	 * Check if the page is a custom post type's index page.
 	 *
-	 * @since 1.9.0 Modified to create $index_pages from $post_types.
-	 * @since 1.8.0 Restructured to handle all post_types at once.
-	 * @since 1.6.0
+	 * @since 1.10.1
 	 *
-	 * @param WP_Query $query       The query object (skip when saving).
-	 * @param array    $post_types The list of post types.
+	 * @param WP    $request    The request object (skip when saving).
+	 * @param array $post_types The list of post types.
 	 */
-	protected function _index_page_query( $query, $post_types ) {
-		$qv =& $query->query_vars;
+	protected function _index_page_request( $request, $post_types ) {
+		$qv =& $request->query_vars;
 
+		// Build an index of the index pages
 		$index_pages = array();
 		foreach( $post_types as $post_type ) {
 			$index_pages[ $post_type ] = get_index( $post_type );
@@ -2157,20 +2239,42 @@ class Setup extends \Smart_Plugin {
 
 		// Make sure this is a page
 		if ( '' != $qv['pagename'] ) {
+			// Get the page
+			$page = get_page_by_path( $qv['pagename'] );
+
 			// Check if this page is a post type index page
-			$post_type = array_search( $query->queried_object_id, $index_pages );
+			$post_type = array_search( $page->ID, $index_pages );
+
 			if ( $post_type !== false ) {
-				$post_type_obj = get_post_type_object( $post_type );
-				if ( ! empty( $post_type_obj->has_archive ) ) {
-					$qv['post_type']             = $post_type;
-					$qv['name']                  = '';
-					$qv['pagename']              = '';
-					$query->is_page              = false;
-					$query->is_singular          = false;
-					$query->is_archive           = true;
-					$query->is_post_type_archive = true;
-				}
+				// Modify the request to be a post type archive instead
+				$qv['post_type'] = $post_type;
+
+				// Make sure these are unset
+				unset( $qv['pagename'] );
+				unset( $qv['page'] );
+				unset( $qv['name'] );
 			}
+		}
+	}
+
+	/**
+	 * Check if it's a post type archive and setups the queried object.
+	 *
+	 * @since 1.10.1 Moved majority of logic to index_page_request, now just handles queried object.
+	 * @since 1.9.0 Modified to create $index_pages from $post_types.
+	 * @since 1.8.0 Restructured to handle all post_types at once.
+	 * @since 1.6.0
+	 *
+	 * @param WP_Query $query The query object (skip when saving).
+	 */
+	protected function _index_page_query( $query ) {
+		$qv =& $query->query_vars;
+
+		if ( is_post_type_archive()
+		  && isset( $qv['post_type'] ) && '' != $qv['post_type']
+		  && $index_page = get_index( $qv['post_type'], 'object' ) ) {
+			$query->queried_object = $index_page;
+			$query->queried_obejct_id = $index_page->ID;
 		}
 	}
 
@@ -2233,7 +2337,7 @@ class Setup extends \Smart_Plugin {
 	 */
 	protected function setup_parent_filtering( $args ) {
 		// Don't bother if not on the admin side.
-		if ( ! is_admin() ) {
+		if ( is_frontend() ) {
 			return;
 		}
 
@@ -2381,10 +2485,89 @@ class Setup extends \Smart_Plugin {
 	// =========================
 
 	/**
+	 * Setup a button for MCE.
+	 *
+	 * Will setup the add_mce_button callback for the correct row/position.
+	 *
+	 * @since 1.11.0
+	 *
+	 * @param string $button The button to add.
+	 * @param array  $args   The arguments for the button (e.g. row, position).
+	 */
+	protected function setup_mce_button( $button, $args ) {
+		// Default row and position
+		$row = 1;
+		$position = null;
+
+		if ( is_int( $args ) ) {
+			// Row number specified
+			$row = $args;
+		} elseif ( is_array( $args ) && ! empty( $args ) ) {
+			if ( isset( $args['row'] ) ) {
+				$row = $args['row'];
+			}
+			if ( isset( $args['position'] ) ) {
+				$position = $args['position'];
+			}
+		}
+
+		// Add the button to the proper hook
+		$hook = $row > 1 ? "mce_buttons_$row" : 'mce_buttons';
+		$this->setup_callback( 'add_mce_button', array( $button, $position ), array( $hook, 10, 1 ) );
+	}
+
+	/**
+	 * Setup buttons for MCE.
+	 *
+	 * Will setup add_mce_button callbacks for the correct row and position.
+	 *
+	 * @since 1.11.0
+	 *
+	 * @param array|string $buttons A list of buttons to enable, with optional row and position values.
+	 */
+	protected function setup_mce_buttons( $buttons ) {
+		csv_array_ref( $buttons );
+
+		// Loop through each button and add it
+		foreach ( $buttons as $button => $args ) {
+			make_associative( $button, $args );
+
+			$this->setup_mce_button( $button, $args );
+		}
+	}
+
+	/**
+	 * Add a button for MCE.
+	 *
+	 * @since 1.11.0
+	 *
+	 * @param array  $buttons       The currently enabled buttons. (skip when saving)
+	 * @param string $button_to_add A list of buttons to enable.
+	 * @param int    $position      Optional An exact position to insert the button.
+	 */
+	protected function add_mce_button( $buttons, $button_to_add, $position ) {
+		// Remove the button if already present; We'll be inserting it in the new position
+		if ( ( $i = array_search( $button_to_add, $buttons ) ) && false !== $i ) {
+			unset( $buttons[ $i ] );
+		}
+
+		if ( is_int( $position ) ) {
+			// Insert at desired position
+			array_splice( $buttons, $position, 0, $button_to_add );
+		} else {
+			// Just append to the end
+			$buttons[] = $button_to_add;
+		}
+
+		return $buttons;
+	}
+
+	/**
 	 * Add buttons for MCE.
 	 *
 	 * This simply adds them; there must be associated JavaScript to display them.
 	 *
+	 * @deprecated 1.11 Use setup_mce_buttons instead.
 	 * @since 1.9.0 Now protected.
 	 * @since 1.0.0
 	 *
@@ -2476,8 +2659,7 @@ class Setup extends \Smart_Plugin {
 				}
 
 				// Add the button to the appropriate row
-				$method = 'add_mce_buttons' . ( $row > 1 ? "_$row" : '' );
-				$this->$method( $button );
+				$this->setup_mce_button( $button, array( 'row' => $row ) );
 			}
 
 			$this->add_mce_plugin( $plugin, $src );
@@ -2540,14 +2722,15 @@ class Setup extends \Smart_Plugin {
 	/**
 	 * Register custom styles for MCE.
 	 *
-	 * @since 1.9.0 Now protected.
+	 * @since 1.11.0 Added use of setup_mce_button
+	 * @since 1.9.0  Now protected.
 	 * @since 1.0.0
 	 *
 	 * @param array $styles An array of styles to register.
 	 */
 	protected function register_mce_styles( $styles ) {
 		// Add the styleselect item to the second row of buttons.
-		$this->add_mce_buttons_2( 'styleselect', 1 );
+		$this->setup_mce_button( 'styleselect', array( 'row' => 2, 'position' => 1 ) );
 
 		// Actually add the styles
 		$this->add_mce_style_formats( $styles );

@@ -39,6 +39,7 @@ class Tools extends \Smart_Plugin {
 		'print_extra_editor_above' => array( 'edit_form_after_title', 10, 1 ),
 		'print_extra_editor_below' => array( 'edit_form_after_editor', 10, 1 ),
 		'add_query_var'            => array( 'query_vars', 10, 1 ),
+		'add_rewrites'             => array( 'init', 10, 0 ),
 	);
 
 	/**
@@ -213,7 +214,7 @@ class Tools extends \Smart_Plugin {
 	 * @param array $attachment Optional An array of data for the attachment to be written to wp_posts.
 	 */
 	public static function upload( $file, $attachment = array() ) {
-		$file = wp_handle_upload( $file, array( 'test_for m' => false ) );
+		$file = wp_handle_upload( $file, array( 'test_form' => false ) );
 
 		if ( isset( $file['error'] ) ) {
 			wp_die( $file['error'], __( 'Image Upload Error' ) );
@@ -1264,5 +1265,18 @@ class Tools extends \Smart_Plugin {
 
 		// Merge the arrays
 		return array_merge( $vars, $new_vars );
+	}
+
+	/**
+	 * Add custom rewrites.
+	 *
+	 * @since 1.10.1
+	 *
+	 * @param array $rewrites The rewrites to add, in pattern => rewrite form.
+	 */
+	public static function _add_rewrites( $rewrites ) {
+		foreach ( $rewrites as $pattern => $rewrite ) {
+			add_rewrite_rule( $pattern, $rewrite, 'top' );
+		}
 	}
 }

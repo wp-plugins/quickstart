@@ -10,6 +10,47 @@
  */
 
 /**
+ * Check if currently doing AJAX.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're doing ajax.
+ */
+function is_ajax() {
+	return defined( 'DOING_AJAX' ) && DOING_AJAX;
+}
+
+/**
+ * Check if on the login page.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're on the login page
+ */
+function is_login() {
+	global $pagenow;
+	return in_array( $pagenow, array( 'wp-login.php', 'wp-register.php' ) );
+}
+
+/**
+ * Check if on the front end of the site.
+ *
+ * Will return true if not in the admin or otherwise doing a non-admin AJAX request.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're on the frontend.
+ */
+function is_frontend() {
+	if ( is_ajax() ) {
+		// Check if the referrer is from the admin
+		return strpos( $_SERVER['HTTP_REFERER'], admin_url() ) !== 0;
+	} else {
+		return ! is_admin() && ! is_login();
+	}
+}
+
+/**
  * Test if  an array is associative or numeric.
  *
  * @since 1.0.0
