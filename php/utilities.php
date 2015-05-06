@@ -10,6 +10,47 @@
  */
 
 /**
+ * Check if currently doing AJAX.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're doing ajax.
+ */
+function is_ajax() {
+	return defined( 'DOING_AJAX' ) && DOING_AJAX;
+}
+
+/**
+ * Check if on the login page.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're on the login page
+ */
+function is_login() {
+	global $pagenow;
+	return in_array( $pagenow, array( 'wp-login.php', 'wp-register.php' ) );
+}
+
+/**
+ * Check if on the front end of the site.
+ *
+ * Will return true if not in the admin or otherwise doing a non-admin AJAX request.
+ *
+ * @since 1.10.1
+ *
+ * @return bool Wether or not we're on the frontend.
+ */
+function is_frontend() {
+	if ( is_ajax() ) {
+		// Check if the referrer is from the admin
+		return strpos( $_SERVER['HTTP_REFERER'], admin_url() ) !== 0;
+	} else {
+		return ! is_admin() && ! is_login();
+	}
+}
+
+/**
  * Test if  an array is associative or numeric.
  *
  * @since 1.0.0
@@ -77,6 +118,7 @@ function _process_n_form( $string, $rules ) {
 /**
  * Convert a string to plural form... or at least try to.
  *
+ * @since 1.10.0 Added condition for words like series
  * @since 1.6.0 Fixed missing e on ch/x/s-es
  * @since 1.0.0
  *
@@ -87,6 +129,7 @@ function _process_n_form( $string, $rules ) {
 function pluralize( $string ) {
 	// The find/replace rules, ordered most specialised to most generic
 	$plurals = array(
+ 		array( '/([^aeiou])ies$/', '$1ies' ), // series => series
  		array( '/erson$/', 'eople' ), // person => people
  		array( '/man$/', 'men' ), // woman => women
 		array( '/(fe?)$/i', '$1ves' ), // half => halves, knife > knives
@@ -101,6 +144,7 @@ function pluralize( $string ) {
 /**
  * Convert a string to singular form... or at least try to.
  *
+ * @since 1.10.0 Added condition for words like series
  * @since 1.0.0
  *
  * @param string $string The string that is to be converted to singular form.
@@ -110,6 +154,7 @@ function pluralize( $string ) {
 function singularize( $string ) {
 	// The find/replace rules, ordered most specialised to most generic
 	$singulars = array(
+ 		array( '/([^aeiou])ies$/', '$1ies' ), // series => series
  		array( '/eople$/', 'erson' ), // people => person
  		array( '/men$/', 'man' ), // women => woman
 		array( '/ives$/i', 'ife' ), // knives => knife

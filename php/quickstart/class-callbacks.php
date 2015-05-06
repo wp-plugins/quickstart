@@ -6,32 +6,26 @@ namespace QuickStart;
  *
  * @package QuickStart
  * @subpackage Callbacks
+ *
+ * @since 1.10.0 Now extends Smart_Plugin
  * @since 1.0.0
  */
 
-class Callbacks {
+class Callbacks extends \Smart_Plugin {
 	/**
 	 * Default admin page callback.
 	 *
 	 * This will server for most admin pages; uses the WordPress Settings API
 	 * to print out any fields registered.
 	 *
+	 * @since 1.10.0 Added $page callback argument.
 	 * @since 1.0.0
+	 *
+	 * @param string $page The page slug.
 	 */
-	public static function default_admin_page() {
-		$screen = get_current_screen();
-
-		if ( preg_match( '/^.+?_page_(.+)$/', $screen->id, $matches ) ) {
-			// Submenu page
-			$page = $matches[1];
-		} else {
-			// Top level page
-			$page = str_replace( 'toplevel_page_', '', $screen->id );
-		}
-
+	public static function default_admin_page( $page ) {
 		?>
 		<div class="wrap">
-			<?php screen_icon( 'generic' ); ?>
 			<h2><?php echo get_admin_page_title(); ?></h2>
 
 			<br>
@@ -50,33 +44,47 @@ class Callbacks {
 	 *
 	 * Prints a sortable list of all posts of a specific type, to manage menu_order.
 	 *
-	 * @since 1.8.0 Restructured to reflect new handling for menu_order_list().
-	 * @since 1.6.0 Fixed use of nested/hierarchical aspect, added quicksort buttons.
-	 * @since 1.4.0 Added use of $nested option.
+	 * @since 1.10.0 Added support for term order management as well as post.
+	 * @since 1.8.0  Restructured to reflect new handling for menu_order_list().
+	 * @since 1.6.0  Fixed use of nested/hierarchical aspect, added quicksort buttons.
+	 * @since 1.4.0  Added use of $nested option.
 	 * @since 1.0.0
+	 *
+	 * @param string $object_type The type of the object this is for (post_type or taxonomy).
+	 * @param string $object_name The objects name.
 	 */
-	public static function menu_order_admin_page() {
+	public static function menu_order_admin_page( $object_type, $object_name ) {
 		global $wpdb;
-		$type      = $_GET['post_type'];
-		$icon      = $type == 'post' ? 'post' : 'page';
-		$post_type = get_post_type_object( $type );
+		if ( $object_type == 'taxonomy' ) {
+			$object = get_taxonomy( $object_name );
+		} else {
+			$object = get_post_type_object( $object_name );
+		}
+
+		// Identify the list method to use
+		$method = "menu_order_list_{$object_type}";
 		?>
 		<div class="wrap">
-			<?php screen_icon( $icon )?>
 			<h2><?php echo get_admin_page_title()?></h2>
 
 			<br>
 
 			<form method="post" action="edit.php">
+				<input type="hidden" name="object_type" value="<?php echo $object_type?>" />
+				<input type="hidden" name="object_name" value="<?php echo $object_name?>" />
 				<?php wp_nonce_field( 'manage_menu_order', '_qsnonce' )?>
-				<div class="qs-order-manager <?php if ( $post_type->hierarchical ) echo 'qs-nested'?>">
-					<?php self::menu_order_list( $post_type )?>
+				<div class="qs-order-manager <?php if ( $object->hierarchical ) echo 'qs-nested'?>">
+					<?php self::$method( $object )?>
 
-					<?php if ( ! $post_type->hierarchical ) :?>
+					<?php if ( ! $object->hierarchical ) :?>
 					<p class="qs-sort">
 						<label>Quick Sort:</label>
 						<button type="button" class="button-secondary" value="name">Alphabetical</button>
+						<?php if ( $object_type == 'taxonomy' ): ?>
+						<button type="button" class="button-secondary" value="count">Post Count</button>
+						<?php else:?>
 						<button type="button" class="button-secondary" value="date">Date</button>
+						<?php endif; ?>
 						<button type="button" class="button-secondary" value="flip">Reverse</button>
 					</p>
 					<?php endif;?>
@@ -90,15 +98,16 @@ class Callbacks {
 	/**
 	 * Menu order manager: Print out the tree of posts.
 	 *
-	 * @since 1.8.0 Restructured to also handle post fetching.
-	 * @since 1.6.0 Added data attributes for quick sort purposes.
-	 * @since 1.4.0 Added $nested argument.
+	 * @since 1.10.0 Renamed to menu_order_list_post_type.
+	 * @since 1.8.0  Restructured to also handle post fetching.
+	 * @since 1.6.0  Added data attributes for quick sort purposes.
+	 * @since 1.4.0  Added $nested argument.
 	 * @since 1.0.0
 	 *
 	 * @param object $post_type The post type object.
 	 * @param int    $parent    Optional The parent ID to filter by (for nesting).
 	 */
-	protected static function menu_order_list( $post_type, $parent = 0 ) {
+	protected static function menu_order_list_post_type( $post_type, $parent = 0 ) {
 		// Build the query
 		$query = array(
 			'qs-context' => 'order-manager',
@@ -133,11 +142,60 @@ class Callbacks {
 				<?php
 				// Print the children if hierarchical
 				if ( $post_type->hierarchical ) {
-					self::menu_order_list( $post_type, $post->ID );
+					self::menu_order_list_post_type( $post_type, $post->ID );
 				}
 				?>
 			</li>
 		<?php endwhile;?>
+		</ol>
+		<?php endif;
+	}
+
+	/**
+	 * Menu order manager: Print out the tree of terms.
+	 *
+	 * @since 1.10.0
+	 *
+	 * @param object $taxonomy The taxonomy object.
+	 * @param int    $parent   Optional The parent ID to filter by (for nesting).
+	 */
+	protected static function menu_order_list_taxonomy( $taxonomy, $parent = 0 ) {
+		// Get all terms
+		$terms = get_terms( $taxonomy->name, array(
+			'hide_empty' => false,
+			'orderby' => 'meta_value_num',
+			'meta_key' => 'menu_order',
+			'parent' => $parent,
+		) );
+
+		// If no terms are found, try without meta ordering
+		if ( ! $terms ) {
+			$terms = get_terms( $taxonomy->name, array(
+				'hide_empty' => false,
+				'parent' => $parent,
+			) );
+		}
+
+		// Print the term list
+		if ( $terms ) : ?>
+		<ol>
+		<?php foreach ( $terms as $term ):?>
+			<li data-count="<?php echo strtotime( $term->count )?>" data-name="<?php echo sanitize_title( $term->name )?>">
+				<div class="inner">
+					<input type="hidden" class="qs-order-id" name="menu_order[]" value="<?php echo $term->term_id?>">
+					<?php if ( $taxonomy->hierarchical ) : ?>
+						<input type="hidden" class="qs-order-parent" name="parent[<?php echo $term->term_id?>]" value="<?php echo $term->parent?>">
+					<?php endif; ?>
+					<?php echo $term->name?>
+				</div>
+				<?php
+				// Print the children if hierarchical
+				if ( $taxonomy->hierarchical ) {
+					self::menu_order_list_taxonomy( $taxonomy, $term->term_id );
+				}
+				?>
+			</li>
+		<?php endforeach;?>
 		</ol>
 		<?php endif;
 	}

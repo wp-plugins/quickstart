@@ -8,14 +8,38 @@
  */
 
 /**
+ * Utility for splitting the content into chunks.
+ *
+ * @since 1.10.0
+ *
+ * @param string $content   The content to split.
+ * @param string $separator The separator to split at.
+ *
+ * @return array The resulting chunks.
+ */
+function get_content_chunks( $content, $separator ) {
+	// Escape the separator to make sure it works in a regex
+	$separator_quoted = preg_quote( $separator, '/' );
+
+	// Move closing tags after a separator to before it, prevents broken code
+	$content = preg_replace( '/(' . $separator_quoted . ')((?:\s*<\/\w+>\s*)+)/', '$2$1', $content );
+
+	// Create the chunks
+	$chunks = explode( $separator, $content );
+
+	return $chunks;
+}
+
+/**
  * Adds new property to $post object with chopped up version of the post.
  *
- * @since 1.8.0 Added filtering hook for the separator string used.
+ * @since 1.10.0 Renamed. Moved chunk creation to separate utility function.
+ * @since 1.8.0  Added filtering hook for the separator string used.
  * @since 1.0.0
  *
  * @param object $post The post to be chopped up.
  */
-function post_chunks( $post ) {
+function qs_helper_chunks_process( $post ) {
 	// Just in case, make sure $post is even an object
 	if ( ! is_object( $post ) ) {
 		return;
@@ -34,19 +58,13 @@ function post_chunks( $post ) {
 	 */
 	$sep = apply_filters( 'qs_helper_chunk_separator', $sep, $post );
 
-	// Escape it to make sure it works in a regex
-	$sep_quoted = preg_quote( $sep, '/' );
-
-	// Move closing tags after a more tag to before it, prevents broken code
-	$post->post_content = preg_replace( '/(' . $sep_quoted . ')((?:\s*<\/\w+>\s*)+)/', '$2$1', $post->post_content );
-
-	// Create the chunks
-	$post->chunks = explode( $sep, $post->post_content );
+	// Get the chunks
+	$post->chunks = get_content_chunks( $post->post_content, $sep );
 
 	// Store the default chunk number for looping
 	$post->chunk = 1;
 }
-add_action( 'the_post', 'post_chunks' );
+add_action( 'the_post', 'qs_helper_chunks_process' );
 
 /**
  * Return a specified chunk
